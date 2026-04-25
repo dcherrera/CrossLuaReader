@@ -1,25 +1,32 @@
 # Build Plan: Lua Plugin Runtime (C Runtime + C++ SDK Bridge)
 
-## Phase 1: Bare Metal Foundation
-- [ ] Create new PlatformIO project targeting ESP32-C3
-- [ ] Write C++ SDK bridge files (~50 lines total, `extern "C"` wrappers):
-  - `bridge_display.cpp` — wraps `EInkDisplay` class methods
-  - `bridge_input.cpp` — wraps `InputManager` class methods
-  - `bridge_storage.cpp` — wraps `SDCardManager` class methods
-  - `bridge_battery.cpp` — wraps `BatteryMonitor` class methods
-- [ ] Write pure C HAL layer (calls bridge functions):
-  - `hal_display.c/h` — display API: init, clear, write buffer, refresh modes
-  - `hal_gpio.c/h` — input API: button init, poll, ISR handling, debouncing
-  - `hal_storage.c/h` — storage API: open, read, write, list, mkdir
-  - `hal_power.c/h` — power API: battery level, sleep, wake, watchdog
-  - `hal_system.c/h` — system API: boot, restart, heap stats, uptime
-- [ ] Implement framebuffer renderer in pure C:
-  - `renderer.c/h` — drawPixel, drawLine, drawRect, fillRect, clearScreen
-  - Port the pixel/line drawing from GfxRenderer (already pure math, easy port)
-- [ ] Verify: blank screen renders, buttons respond, SD card mounts
-- [ ] Measure flash/RAM baseline
-- [ ] **Document**: Write `docs/hal-api.md` — HAL function reference, bridge pattern explanation. Update `docs/architecture.md` with actual measurements.
-- [ ] **Update plan**: Check off completed tasks, note any deferred items or scope changes.
+## Phase 1: Bare Metal Foundation ✅
+- [x] Create new PlatformIO project targeting ESP32-C3
+  - `platformio.ini` configured for C17, Arduino framework, ESP32-C3
+  - SDK copied into `lib/open-x4-sdk/` (no symlink)
+- [x] Write logging module (`lib/logging/logging.c/h`)
+  - `cl_log_printf()` using ESP-IDF `esp_timer` + `printf`
+  - `LOG_ERR`, `LOG_INF`, `LOG_DBG` macros gated by build flags
+- [x] Write C++ SDK bridge files (`lib/hal/bridge_*.cpp`):
+  - `bridge_display.cpp` — wraps `EInkDisplay` (init, clear, refresh, framebuffer, deep sleep, X3 support)
+  - `bridge_input.cpp` — wraps `InputManager` + `SPI.begin()` + X3/X4 device detection via I2C + deep sleep
+  - `bridge_storage.cpp` — wraps `SDCardManager` with opaque `void*` file/dir handles
+  - `bridge_battery.cpp` — wraps `BatteryMonitor` (ADC percentage + millivolts)
+- [x] Write pure C HAL layer (`lib/hal/hal_*.c/h`):
+  - `hal_system` — ESP-IDF direct: free heap, restart, uptime, version
+  - `hal_gpio` — SPI init, input polling, device detection caching, deep sleep
+  - `hal_display` — X3 auto-config, dimension caching, refresh modes
+  - `hal_storage` — opaque file/dir handles, logged open failures
+  - `hal_power` — battery caching (30s poll), auto-sleep (10min idle)
+- [x] Implement framebuffer renderer (`lib/renderer/renderer.c/h`):
+  - `renderer_draw_pixel` with orientation transforms (4 modes)
+  - `renderer_draw_line` with Bresenham's + h/v optimizations
+  - `renderer_draw_rect`, `renderer_fill_rect`, `renderer_clear_screen`, `renderer_invert_screen`
+  - `renderer_get_viewable_margins` with rotated bezel compensation
+- [x] Build passes: Flash 5.7% (376KB), RAM 20.9% (68KB)
+- [ ] Verify on device: blank screen renders, buttons respond, SD card mounts
+- [x] **Document**: Write `docs/hal-api.md`, update `docs/architecture.md` with measurements
+- [x] **Update plan**: Checked off completed tasks
 
 ## Phase 2: Font Renderer
 - [ ] Design `.cfont` binary format (header, intervals, glyphs, compressed bitmaps, kerning)

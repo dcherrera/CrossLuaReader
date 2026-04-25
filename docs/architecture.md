@@ -103,14 +103,24 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 
 ## Memory Model
 
+### Measured (Phase 1 — HAL + renderer, no Lua/fonts yet)
+
+| Metric | Value | % of Budget |
+|--------|-------|-------------|
+| Flash used | 376KB | 5.7% of 6.5MB |
+| RAM used | 68KB | 20.9% of 327KB |
+
+### Projected (full runtime with Lua + fonts)
+
 | Region | Size | Usage |
 |--------|------|-------|
-| Flash | ~500KB | C runtime, Lua interpreter |
+| Flash | ~500KB | C runtime + Lua interpreter |
 | DRAM | ~380KB total | |
+| — Arduino/ESP-IDF base | ~68KB | Measured Phase 1 baseline |
 | — Lua state | ~50KB | Interpreter + script state |
 | — Lua stack | ~20KB | Execution stack |
 | — Font cache | ~30KB | LRU decompressed glyph groups |
-| — Framebuffer | 48KB | Single e-ink buffer |
+| — Framebuffer | 48KB | Single e-ink buffer (inside SDK) |
 | — WiFi (when active) | ~50KB | TCP/IP stack |
 | — Available | ~100-150KB | Plugin working memory |
 | SD card | 32GB+ | Fonts, plugins, books, cache |
