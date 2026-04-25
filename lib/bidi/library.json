@@ -1,0 +1,7 @@
+{
+    "name": "bidi",
+    "version": "1.0.0",
+    "dependencies": {
+        "font": "*"
+    }
+}

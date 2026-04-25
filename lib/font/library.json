@@ -1,0 +1,10 @@
+{
+    "name": "font",
+    "version": "1.0.0",
+    "dependencies": {
+        "hal": "*",
+        "renderer": "*",
+        "bidi": "*",
+        "uzlib": "*"
+    }
+}

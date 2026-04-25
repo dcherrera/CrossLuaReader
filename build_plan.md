@@ -28,22 +28,23 @@
 - [x] **Document**: Write `docs/hal-api.md`, update `docs/architecture.md` with measurements
 - [x] **Update plan**: Checked off completed tasks
 
-## Phase 2: Font Renderer
-- [ ] Design `.cfont` binary format (header, intervals, glyphs, compressed bitmaps, kerning)
-- [ ] Build `cfont-convert` tool (Python):
-  - Reuse logic from existing `fontconvert.py`
-  - TTF → .cfont with --2bit, --compress, --size, --style
-  - Convert all existing fonts (Bookerly, NotoSans, NotoSansHebrew, OpenDyslexic, Ubuntu)
-- [ ] Implement font loader in C:
-  - `font_loader.c/h` — read .cfont from SD, parse into runtime structures
-  - `font_cache.c/h` — LRU decompression cache (port from existing FontDecompressor)
-  - `font_render.c/h` — glyph lookup, drawText, getTextWidth, getTextAdvanceX
-  - Combining mark support (nikkud, diacriticals)
-  - BiDi/RTL reordering (port ScriptDetector logic)
-- [ ] Test: render Latin and Hebrew text from SD-loaded fonts
-- [ ] Verify: identical glyph rendering to current firmware
-- [ ] **Document**: Write `docs/cfont-format.md` — binary format spec. Write `tools/cfont-convert/README.md` — usage guide. Update `docs/architecture.md` with font system details.
-- [ ] **Update plan**: Check off completed tasks, note any deferred items or scope changes.
+## Phase 2: Font System ✅
+- [x] Designed `.cfont` binary format: 32B header + intervals/glyphs/groups/kerning/ligatures + DEFLATE bitmaps
+- [x] Created `tools/cfont-convert/cfont_convert.py` — forked fontconvert.py with `--cfont` output mode
+- [x] Created `tools/cfont-convert/convert_all.sh` — batch conversion for all font families
+- [x] Copied `lib/uzlib/` from CrossPoint — pure C DEFLATE decompressor
+- [x] `lib/font/font_types.h` — C structs (glyph 14B, interval 12B, group 18B, kern 3B, ligature 8B), fp4 macros, combining mark helpers
+- [x] `lib/font/utf8.c/h` — UTF-8 decode/encode, combining mark detection (Latin + Hebrew nikkud)
+- [x] `lib/bidi/bidi.c/h` — RTL detection, grapheme-cluster-aware reversal, bracket mirroring
+- [x] `lib/font/font_loader.c/h` — .cfont loader: single contiguous malloc, pointer setup, validation
+- [x] `lib/font/font_cache.c/h` — 3-slot LRU decompression cache, uzlib DEFLATE, byte-aligned→packed compaction
+- [x] `lib/font/font_render.c/h` — drawText (combining marks, kerning, ligatures, BiDi), getTextAdvance, getTextWidth
+- [x] `lib/font/font_manager.c/h` — 4-slot font ID management
+- [x] Build passes: Flash 6.0% (396KB), RAM 21.7% (71KB). +20KB flash, +3KB RAM over Phase 1.
+- [ ] Test on device: render Latin and Hebrew text from SD-loaded .cfont
+- [ ] Verify: glyph rendering quality matches CrossPoint
+- [x] **Document**: Write `docs/cfont-format.md`, update `docs/architecture.md`
+- [x] **Update plan**: Checked off completed tasks
 
 ## Phase 3: Lua Interpreter Integration
 - [ ] Add Lua 5.4 source to project (`lib/lua/`, MIT license, ~25 .c files)
