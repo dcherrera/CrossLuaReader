@@ -35,6 +35,55 @@ static char nav_arg[PLUGIN_PATH_MAX];
 
 #define STATE_FILE "/crosslua_state.txt"
 
+/* ── Lua file loading via HAL storage ───────────────────────────────── */
+
+/**
+ * Load and execute a Lua file from SD card using hal_storage.
+ * Standard luaL_dofile uses C fopen which doesn't work with SdFat.
+ *
+ * @return 0 on success, non-zero on error (error message on Lua stack)
+ */
+static int load_lua_file(lua_State *L, const char *path) {
+    hal_file_t f = hal_storage_open(path, HAL_FILE_READ);
+    if (!f) {
+        lua_pushfstring(L, "cannot open %s", path);
+        return 1;
+    }
+
+    size_t size = hal_storage_file_size(f);
+    if (size == 0 || size > 256 * 1024) {
+        hal_storage_file_close(f);
+        lua_pushfstring(L, "file too large or empty: %s (%d bytes)", path, (int)size);
+        return 1;
+    }
+
+    char *buf = (char *)malloc(size);
+    if (!buf) {
+        hal_storage_file_close(f);
+        lua_pushfstring(L, "out of memory loading %s", path);
+        return 1;
+    }
+
+    int read = hal_storage_file_read(f, buf, size);
+    hal_storage_file_close(f);
+
+    if (read != (int)size) {
+        free(buf);
+        lua_pushfstring(L, "read error on %s: got %d, expected %d", path, read, (int)size);
+        return 1;
+    }
+
+    int err = luaL_loadbuffer(L, buf, size, path);
+    free(buf);
+
+    if (err != 0) {
+        return err;  /* error message already on stack */
+    }
+
+    /* Execute the loaded chunk */
+    return lua_pcall(L, 0, LUA_MULTRET, 0);
+}
+
 /* ── Helpers ────────────────────────────────────────────────────────── */
 
 /**
@@ -96,7 +145,7 @@ static bool parse_plugin_manifest(const char *path, plugin_info_t *info) {
     lua_State *L = api_create_state();
     if (!L) return false;
 
-    if (luaL_dofile(L, path) != 0) {
+    if (load_lua_file(L, path) != 0) {
         const char *err = lua_tostring(L, -1);
         LOG_ERR("PLUG", "Parse error in %s: %s", path, err ? err : "?");
         lua_close(L);
@@ -350,7 +399,7 @@ bool plugin_manager_start(const char *plugin_id, const char *arg) {
     }
 
     /* Load and run the plugin file */
-    if (luaL_dofile(active_state, plugins[idx].path) != 0) {
+    if (load_lua_file(active_state, plugins[idx].path) != 0) {
         const char *err = lua_tostring(active_state, -1);
         LOG_ERR("PLUG", "Load error: %s", err ? err : "?");
         lua_close(active_state);

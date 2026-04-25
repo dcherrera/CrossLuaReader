@@ -77,8 +77,8 @@ void setup() {
         LOG_INF("MAIN", "No plugins found");
     }
 
-    /* Step 10: Start plugin (restore last or first available) */
-    if (!plugin_manager_start(NULL, NULL)) {
+    /* Step 10: Start plugin — test_simple for debugging, then NULL for auto */
+    if (!plugin_manager_start("test_simple", NULL)) {
         LOG_ERR("MAIN", "No plugin to start — device idle");
         renderer_clear_screen(0xFF);
         renderer_fill_rect(20, 20, 200, 40, true);

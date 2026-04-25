@@ -161,7 +161,11 @@ static bool decompress_group(int slot_idx, const font_data_t *font,
     d.dest = slot->data;
     d.dest_limit = slot->data + grp->uncompressed_size;
 
-    int res = uzlib_uncompress(&d);
+    /* uzlib_uncompress returns TINF_OK (0) for more data, TINF_DONE (1) when finished */
+    int res;
+    while ((res = uzlib_uncompress(&d)) == TINF_OK) {
+        /* keep going */
+    }
     free(comp_buf);
 
     if (res != TINF_DONE) {
