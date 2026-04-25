@@ -948,9 +948,11 @@ if args.cfont_output:
     with open(args.cfont_output, 'wb') as f:
         f.write(header)
 
-        # Intervals
-        for interval in intervals:
-            f.write(struct.pack('<III', interval[0], interval[1], interval[2]))
+        # Intervals (compute offset on the fly, same as C output)
+        iv_offset = 0
+        for i_start, i_end in intervals:
+            f.write(struct.pack('<III', i_start, i_end, iv_offset))
+            iv_offset += i_end - i_start + 1
 
         # Glyphs (14 bytes each)
         for props, packed in all_glyphs:

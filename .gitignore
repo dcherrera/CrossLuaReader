@@ -15,8 +15,8 @@ compile_commands.json
 # Python
 **/__pycache__/
 
-# Generated fonts (source TTFs are tracked, generated .cfont are not)
-sdcard/fonts/*.cfont
+# Font converter output (for local dev — pre-built fonts ARE committed in sdcard/fonts/)
+# sdcard/fonts/*.cfont  -- these are tracked, shipped for end users
 
 # Personal files
 david/
