@@ -103,12 +103,13 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 
 ## Memory Model
 
-### Measured (Phase 1 — HAL + renderer, no Lua/fonts yet)
+### Measured
 
-| Metric | Value | % of Budget |
-|--------|-------|-------------|
-| Flash used | 376KB | 5.7% of 6.5MB |
-| RAM used | 68KB | 20.9% of 327KB |
+| Phase | Flash | RAM | What |
+|-------|-------|-----|------|
+| 1 - HAL + renderer | 376KB (5.7%) | 68KB (20.9%) | Hardware, pixels |
+| 2 - Font system | 396KB (6.0%) | 71KB (21.7%) | .cfont, loader, cache, renderer, BiDi |
+| 3 - Lua interpreter | 552KB (8.4%) | 71KB (21.7%) | Lua 5.4 + all API bindings |
 
 ### Projected (full runtime with Lua + fonts)
 
