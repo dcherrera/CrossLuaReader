@@ -21,7 +21,11 @@ extern "C" {
 #include "font_manager.h"
 #include "font_render.h"
 #include "font_cache.h"
+#include "api_register.h"
 #include "logging.h"
+
+#include "lua.h"
+#include "lauxlib.h"
 }
 
 void setup() {
@@ -76,28 +80,41 @@ void setup() {
 
     LOG_INF("MAIN", "Free heap after font load: %u bytes", hal_system_free_heap());
 
-    /* Render test */
-    renderer_clear_screen(0xFF);
-
-    if (font_id >= 0) {
-        const font_data_t *font = font_manager_get(font_id);
-        const char *font_path = font_manager_get_path(font_id);
-
-        font_render_draw_text(font, font_path, 20, 20, "Hello, CrossLua Reader!", true);
-        font_render_draw_text(font, font_path, 20, 60, "Phase 2: Font System", true);
-
-        /* Geometric test shapes */
-        renderer_draw_line(20, 100, 440, 100, true);
-        renderer_draw_rect(20, 110, 200, 50, true);
-    } else {
-        /* No font available — fallback to geometric test */
-        LOG_INF("MAIN", "No font on SD — drawing test pattern only");
-        renderer_fill_rect(20, 20, 200, 80, true);
-        renderer_draw_rect(20, 120, 200, 80, true);
-        renderer_draw_line(20, 220, 440, 220, true);
+    /* Step 10: Create Lua state with all API modules */
+    lua_State *L = api_create_state();
+    if (!L) {
+        LOG_ERR("MAIN", "Lua init failed");
+        return;
     }
 
-    hal_display_refresh(REFRESH_FAST);
+    LOG_INF("MAIN", "Free heap after Lua init: %u bytes", hal_system_free_heap());
+
+    /* Try to run /plugins/init.lua from SD card */
+    if (hal_storage_exists("/plugins/init.lua")) {
+        LOG_INF("MAIN", "Running /plugins/init.lua");
+        int err = luaL_dofile(L, "/plugins/init.lua");
+        if (err) {
+            const char *msg = lua_tostring(L, -1);
+            LOG_ERR("MAIN", "Lua error: %s", msg ? msg : "(unknown)");
+            lua_pop(L, 1);
+        }
+    } else {
+        /* No init script — draw built-in test pattern */
+        LOG_INF("MAIN", "No /plugins/init.lua — drawing test pattern");
+        renderer_clear_screen(0xFF);
+
+        if (font_id >= 0) {
+            const font_data_t *font = font_manager_get(font_id);
+            const char *font_path = font_manager_get_path(font_id);
+            font_render_draw_text(font, font_path, 20, 20, "CrossLua Reader", true);
+            font_render_draw_text(font, font_path, 20, 60, "Lua ready. No init.lua found.", true);
+        } else {
+            renderer_fill_rect(20, 20, 200, 80, true);
+            renderer_draw_rect(20, 120, 200, 80, true);
+        }
+
+        hal_display_refresh(REFRESH_FAST);
+    }
 
     LOG_INF("MAIN", "Init complete");
     LOG_INF("MAIN", "Free heap: %u bytes", hal_system_free_heap());

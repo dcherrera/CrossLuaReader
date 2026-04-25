@@ -46,23 +46,26 @@
 - [x] **Document**: Write `docs/cfont-format.md`, update `docs/architecture.md`
 - [x] **Update plan**: Checked off completed tasks
 
-## Phase 3: Lua Interpreter Integration
-- [ ] Add Lua 5.4 source to project (`lib/lua/`, MIT license, ~25 .c files)
-- [ ] Configure Lua for ESP32-C3:
-  - Disable file I/O module (use our storage API instead)
-  - Disable os module (use our system API instead)
-  - Set appropriate stack/memory limits
-- [ ] Build and measure flash/RAM cost (~100KB flash, ~50KB RAM expected)
-- [ ] Implement C → Lua binding helpers:
-  - `lua_api.c/h` — register C functions, type conversion helpers, error handling
-- [ ] Implement `display.*` Lua bindings (clear, drawText, drawLine, refresh, dimensions)
-- [ ] Implement `input.*` Lua bindings (waitButton, poll, isPressed, constants)
-- [ ] Implement `storage.*` Lua bindings (read, write, exists, list, mkdir, remove, fileSize)
-- [ ] Implement `system.*` Lua bindings (freeHeap, battery, millis, delay, log, version)
-- [ ] Implement `font.*` Lua bindings (load, unload, list)
-- [ ] Test: "Hello World" plugin from SD card — renders text, responds to buttons
-- [ ] **Document**: Write `docs/lua-api.md` — full Lua API reference (display, input, storage, system, font). Update `docs/plugin-guide.md` with working examples tested on device.
-- [ ] **Update plan**: Check off completed tasks, note any deferred items or scope changes.
+## Phase 3: Lua Interpreter Integration ✅
+- [x] Added Lua 5.4.7 source to `lib/lua/` (32 .c files, 27 .h files, MIT license)
+  - Patched `luaconf.h` to include `<climits>` for C++ compatibility
+  - Excluded `lua.c` (standalone interpreter) and `luac.c` (compiler)
+- [x] Configured for ESP32-C3: io/os modules excluded via selective registration in `api_register.c`
+  - Opens: base, string, table, math, utf8, coroutine
+  - Excludes: io, os, debug (unnecessary, saves memory)
+- [x] Flash cost: +156KB (396KB → 552KB). RAM: unchanged (state allocated at runtime).
+- [x] Lua API bindings (lib/lua_api/):
+  - `api_display.c/h` — clear, refresh, drawText, drawLine, drawRect, fillRect, width, height, getTextWidth, getLineHeight
+  - `api_input.c/h` — poll, isPressed, wasPressed, wasReleased, getHeldTime, waitButton + button constants
+  - `api_storage.c/h` — read, readBytes, write, exists, mkdir, remove, fileSize, list (directory iteration)
+  - `api_system.c/h` — freeHeap, totalHeap, batteryPercent, millis, delay, log, version, restart, sleep
+  - `api_font.c/h` — load, unload
+  - `api_register.c/h` — creates Lua state, opens safe libs, registers all modules
+- [x] Main.cpp runs `/plugins/init.lua` from SD if present, falls back to test pattern
+- [x] Build passes: Flash 8.4% (552KB), RAM 21.7% (71KB)
+- [ ] Test on device: "Hello World" Lua plugin from SD card
+- [ ] **Document**: Write `docs/lua-api.md`
+- [x] **Update plan**: Checked off completed tasks
 
 ## Phase 4: Plugin Manager
 - [ ] Implement plugin discovery — scan `/plugins/` on SD for `.lua` files

@@ -1,0 +1,10 @@
+{
+    "name": "lua_api",
+    "version": "1.0.0",
+    "dependencies": {
+        "lua": "*",
+        "hal": "*",
+        "renderer": "*",
+        "font": "*"
+    }
+}
