@@ -1,0 +1,22 @@
+.pio
+.idea
+.DS_Store
+.vscode
+.vs
+.history/
+/.cache
+/.venv
+
+# Build artifacts
+build
+compile_commands.json
+*.local*
+
+# Python
+**/__pycache__/
+
+# Generated fonts (source TTFs are tracked, generated .cfont are not)
+sdcard/fonts/*.cfont
+
+# Personal files
+david/
