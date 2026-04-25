@@ -82,41 +82,22 @@
 - [x] **Document**: docs/plugin-lifecycle.md written
 - [x] **Update plan**: Checked off completed tasks
 
-## Phase 5: Core UI Plugins
-- [ ] Implement `json.*` Lua API (parse, encode) — native C for performance
-- [ ] Implement `i18n.*` Lua API — load translation files from SD, get/set language
-- [ ] Write translation loader — YAML or JSON translation files on SD (`/i18n/en.json`, `/i18n/he.json`)
-- [ ] Write home screen plugin (`/plugins/home.lua`)
-  - Menu: Continue Reading, Browse Files, Network, Settings
-  - Recent books list with last-read tracking
-  - Sleep screen (dark, light, cover, custom image)
-  - Boot screen / splash
-- [ ] Write file browser plugin (`/plugins/file_browser.lua`)
-  - Directory navigation, file filtering by extension
-  - Dispatch to reader plugin based on file type
-  - Show/hide hidden files option
-  - Sort by name/date
-- [ ] Write settings plugin (`/plugins/settings.lua`)
-  - Display: sleep screen, battery display, anti-aliasing, sunlight fix, UI theme
-  - Reader: font family, font size, line spacing, screen margin, paragraph alignment, hyphenation, images, embedded style
-  - Controls: reading orientation, side button layout, front button remap, short power button action, long-press chapter skip
-  - System: language, time to sleep, refresh frequency, clear cache, check updates, KOReader sync config
-  - Settings persistence to `/settings.json` on SD
-- [ ] Write WiFi manager plugin (`/plugins/wifi_manager.lua`)
-  - Network scan, connect with password, save/forget networks
-  - Hotspot mode (create WiFi network)
-  - Connection status display
-- [ ] Write on-screen keyboard plugin (`/plugins/keyboard.lua`)
-  - Text entry for WiFi passwords, URLs, search queries
-  - Used as a sub-plugin by other plugins
-- [ ] Write status bar renderer (shared Lua module `/plugins/lib/status_bar.lua`)
-  - Book/chapter progress, page count, battery, title
-  - Configurable: show/hide elements, progress bar style
-- [ ] Write button remap plugin (`/plugins/button_remap.lua`)
-  - Interactive front button reassignment
-- [ ] Test: full device operation — boot, browse, settings, WiFi connect
-- [ ] **Document**: Write `docs/settings-schema.md` — all settings keys, types, defaults. Write `docs/i18n-guide.md` — how to add a new language translation. Update `docs/plugin-guide.md` with keyboard and status bar integration examples. Update `docs/architecture.md` with measurements.
-- [ ] **Update plan**: Check off completed tasks, note any deferred items or scope changes.
+## Phase 5: Core UI Plugins (in progress)
+- [x] Extended renderer: `renderer_fill_rounded_rect()` (midpoint circle algorithm)
+- [x] Extended display API: `fillRoundedRect`, `drawTextInverted`, `setOrientation`, `getOrientation`
+- [x] Shared Lua modules:
+  - `plugins/lib/theme.lua` — Lyra/Classic metrics (row heights, padding, corner radius)
+  - `plugins/lib/ui.lua` — draw_header, draw_menu, draw_list, draw_button_hints
+  - `plugins/lib/status_bar.lua` — battery, page count, progress, title
+- [x] Home screen plugin (`plugins/home.lua`) — menu with Continue Reading, Browse Files, Settings
+- [x] File browser plugin (`plugins/file_browser.lua`) — directory nav, file filtering, reader dispatch
+- [x] Settings plugin (`plugins/settings.lua`) — font size, orientation, margin, refresh, theme
+- [x] Template system: `templates/home_lyra.lua`, `templates/home_classic.lua`
+- [x] Build passes: Flash 8.5% (555KB), RAM 22.9% (75KB)
+- [ ] Deferred to later: json.* API, i18n.* API, keyboard plugin, WiFi manager, button remap
+- [ ] Test on device: home → browser → settings → back flow
+- [ ] **Document**: Update `docs/lua-api.md` with new display functions. Update `docs/architecture.md` with measurements.
+- [ ] **Update plan**: Check off completed tasks, note deferred items.
 
 ## Phase 6: Reader Plugins
 - [ ] Implement `zip.*` C API (open, list, read, close) — wraps miniz/uzlib

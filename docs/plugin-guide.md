@@ -148,6 +148,53 @@ See `build_spec.md` for the complete API documentation for:
 - `system.*` — device info
 - `i18n.*` — translations
 
+## Shared Lua Modules
+
+CrossLua Reader ships shared modules in `/plugins/lib/` that plugins can `require`:
+
+### lib.theme
+Theme metrics for consistent layout. Returns Lyra (modern) or Classic constants.
+
+```lua
+local theme = require("lib.theme")
+local t = theme.get()  -- { menu_row_height=64, corner_radius=6, side_padding=20, ... }
+
+-- Switch theme:
+theme.set("classic")  -- or "lyra" (default)
+```
+
+### lib.ui
+Shared UI drawing helpers. Uses theme metrics automatically.
+
+```lua
+local ui = require("lib.ui")
+
+ui.draw_header(font_id, "My Plugin")        -- top bar with battery
+ui.draw_menu(font_id, items, selected, y)    -- scrollable menu with selection highlight
+ui.draw_list(font_id, items, selected, y, max_visible, scroll_offset)  -- file/item list
+ui.draw_button_hints(font_id, {"< Back", "Select", ""})  -- bottom hint bar
+```
+
+Menu items format: `{ {label="Browse Files"}, {label="Settings"} }`
+
+### lib.status_bar
+Reader status bar for book progress.
+
+```lua
+local status_bar = require("lib.status_bar")
+status_bar.draw(font_id, progress_pct, current_page, total_pages, "Book Title")
+```
+
+## Templates
+
+Home screen templates live in `/templates/` on the SD card. To customize:
+
+1. Pick a template (e.g., `home_classic.lua`)
+2. Copy it to `/plugins/home.lua`
+3. Reboot — your custom home screen loads
+
+Anyone can create and share templates. They're just Lua plugins that define `id = "home"`.
+
 ## Tips
 
 ### Memory

@@ -121,6 +121,47 @@ static int l_display_get_line_height(lua_State *L) {
     return 1;
 }
 
+/* display.fillRoundedRect(x, y, w, h, radius) */
+static int l_display_fill_rounded_rect(lua_State *L) {
+    int x = (int)luaL_checkinteger(L, 1);
+    int y = (int)luaL_checkinteger(L, 2);
+    int w = (int)luaL_checkinteger(L, 3);
+    int h = (int)luaL_checkinteger(L, 4);
+    int r = (int)luaL_optinteger(L, 5, 6);
+    renderer_fill_rounded_rect(x, y, w, h, r, true);
+    return 0;
+}
+
+/* display.drawTextInverted(fontId, x, y, text) — white text (for selected items) */
+static int l_display_draw_text_inverted(lua_State *L) {
+    int font_id = (int)luaL_checkinteger(L, 1);
+    int x = (int)luaL_checkinteger(L, 2);
+    int y = (int)luaL_checkinteger(L, 3);
+    const char *text = luaL_checkstring(L, 4);
+
+    const font_data_t *font = font_manager_get(font_id);
+    const char *path = font_manager_get_path(font_id);
+    if (!font || !path) {
+        return luaL_error(L, "invalid font id: %d", font_id);
+    }
+
+    font_render_draw_text(font, path, x, y, text, false);
+    return 0;
+}
+
+/* display.setOrientation(n) — 0=portrait, 1=landscape_cw, 2=inverted, 3=landscape_ccw */
+static int l_display_set_orientation(lua_State *L) {
+    int orient = (int)luaL_checkinteger(L, 1);
+    renderer_set_orientation((orientation_t)orient);
+    return 0;
+}
+
+/* display.getOrientation() → int */
+static int l_display_get_orientation(lua_State *L) {
+    lua_pushinteger(L, (int)renderer_get_orientation());
+    return 1;
+}
+
 void api_display_register(lua_State *L) {
     static const luaL_Reg funcs[] = {
         {"clear",          l_display_clear},
@@ -132,8 +173,12 @@ void api_display_register(lua_State *L) {
         {"fillRect",       l_display_fill_rect},
         {"width",          l_display_width},
         {"height",         l_display_height},
-        {"getTextWidth",   l_display_get_text_width},
-        {"getLineHeight",  l_display_get_line_height},
+        {"getTextWidth",      l_display_get_text_width},
+        {"getLineHeight",     l_display_get_line_height},
+        {"fillRoundedRect",   l_display_fill_rounded_rect},
+        {"drawTextInverted",  l_display_draw_text_inverted},
+        {"setOrientation",    l_display_set_orientation},
+        {"getOrientation",    l_display_get_orientation},
         {NULL, NULL}
     };
     luaL_newlib(L, funcs);

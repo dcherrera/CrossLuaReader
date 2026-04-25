@@ -35,6 +35,18 @@ Draw a rectangle outline (1px border).
 ### display.fillRect(x, y, w, h)
 Draw a filled rectangle.
 
+### display.fillRoundedRect(x, y, w, h, [radius])
+Draw a filled rectangle with rounded corners. `radius` defaults to 6. Used for Lyra-style selection highlights and UI elements.
+
+### display.drawTextInverted(fontId, x, y, text)
+Draw white text (for rendering text on a dark/selected background). Same as `drawText` but draws white pixels instead of black.
+
+### display.setOrientation(n)
+Set the screen orientation. `0` = portrait, `1` = landscape CW, `2` = inverted, `3` = landscape CCW. Affects all subsequent drawing and dimension queries.
+
+### display.getOrientation() → int
+Returns the current orientation (0-3).
+
 ### display.width() → int
 Logical screen width for current orientation.
 

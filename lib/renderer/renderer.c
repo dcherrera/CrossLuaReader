@@ -175,6 +175,74 @@ void renderer_fill_rect(int x, int y, int w, int h, bool black) {
     }
 }
 
+void renderer_fill_rounded_rect(int x, int y, int w, int h, int radius, bool black) {
+    if (w <= 0 || h <= 0) return;
+    if (radius <= 0) {
+        renderer_fill_rect(x, y, w, h, black);
+        return;
+    }
+
+    /* Clamp radius to half the smallest dimension */
+    if (radius > w / 2) radius = w / 2;
+    if (radius > h / 2) radius = h / 2;
+
+    /* Fill center rectangle (between the rounded corners) */
+    renderer_fill_rect(x + radius, y, w - 2 * radius, h, black);
+
+    /* Fill left and right side strips (excluding corner zones) */
+    renderer_fill_rect(x, y + radius, radius, h - 2 * radius, black);
+    renderer_fill_rect(x + w - radius, y + radius, radius, h - 2 * radius, black);
+
+    /* Fill rounded corners using midpoint circle algorithm */
+    int cx_tl = x + radius;         /* top-left center */
+    int cy_tl = y + radius;
+    int cx_tr = x + w - 1 - radius; /* top-right center */
+    int cy_tr = y + radius;
+    int cx_bl = x + radius;         /* bottom-left center */
+    int cy_bl = y + h - 1 - radius;
+    int cx_br = x + w - 1 - radius; /* bottom-right center */
+    int cy_br = y + h - 1 - radius;
+
+    int r = radius;
+    int px = 0, py = r;
+    int d = 1 - r;
+
+    while (px <= py) {
+        /* Fill horizontal spans for each corner quadrant */
+        /* Top-left: fill from (cx_tl - py) to (cx_tl) at (cy_tl - px) */
+        for (int i = cx_tl - py; i <= cx_tl; i++)
+            renderer_draw_pixel(i, cy_tl - px, black);
+        for (int i = cx_tl - px; i <= cx_tl; i++)
+            renderer_draw_pixel(i, cy_tl - py, black);
+
+        /* Top-right */
+        for (int i = cx_tr; i <= cx_tr + py; i++)
+            renderer_draw_pixel(i, cy_tr - px, black);
+        for (int i = cx_tr; i <= cx_tr + px; i++)
+            renderer_draw_pixel(i, cy_tr - py, black);
+
+        /* Bottom-left */
+        for (int i = cx_bl - py; i <= cx_bl; i++)
+            renderer_draw_pixel(i, cy_bl + px, black);
+        for (int i = cx_bl - px; i <= cx_bl; i++)
+            renderer_draw_pixel(i, cy_bl + py, black);
+
+        /* Bottom-right */
+        for (int i = cx_br; i <= cx_br + py; i++)
+            renderer_draw_pixel(i, cy_br + px, black);
+        for (int i = cx_br; i <= cx_br + px; i++)
+            renderer_draw_pixel(i, cy_br + py, black);
+
+        px++;
+        if (d < 0) {
+            d += 2 * px + 1;
+        } else {
+            py--;
+            d += 2 * (px - py) + 1;
+        }
+    }
+}
+
 void renderer_clear_screen(uint8_t color) {
     if (framebuffer) {
         memset(framebuffer, color, buffer_size);
