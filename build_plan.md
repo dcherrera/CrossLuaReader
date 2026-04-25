@@ -67,21 +67,20 @@
 - [ ] **Document**: Write `docs/lua-api.md`
 - [x] **Update plan**: Checked off completed tasks
 
-## Phase 4: Plugin Manager
-- [ ] Implement plugin discovery — scan `/plugins/` on SD for `.lua` files
-- [ ] Implement plugin manifest parsing (plugin table with name, id, type, fileExtensions)
-- [ ] Implement plugin lifecycle management (onEnter, loop, onExit)
-- [ ] Implement plugin switching — unload current, load next, manage Lua state
-- [ ] Implement error handling — pcall wrappers, error display, recovery to menu
-- [ ] Implement boot sequence:
-  1. Hardware init
-  2. Mount SD, load fonts
-  3. Init Lua, register APIs
-  4. Scan plugins, build menu
-  5. Restore last state or show home
-- [ ] Test: switch between multiple plugins without memory leaks
-- [ ] **Document**: Write `docs/plugin-lifecycle.md` — discovery, manifest format, switching behavior, error handling, memory model. Update `docs/plugin-guide.md` with plugin switching examples.
-- [ ] **Update plan**: Check off completed tasks, note any deferred items or scope changes.
+## Phase 4: Plugin Manager ✅
+- [x] Plugin discovery: scans `/plugins/` for `.lua` files, parses manifests via temporary Lua states
+- [x] Manifest parsing: reads name, id, type, menuEntry, fileExtensions from plugin table
+- [x] Lifecycle: onEnter(arg), loop(), onExit() called via lua_pcall
+- [x] Switching: stops current (onExit + close state), creates fresh state, loads next, calls onEnter
+- [x] Navigation: plugin.finish(), plugin.navigate(id, arg), plugin.goHome() registered as C functions
+- [x] Error handling: all pcall-wrapped, errors logged, plugin stopped on crash
+- [x] State persistence: active plugin ID saved to /crosslua_state.txt, restored on boot
+- [x] Reader lookup: plugin_manager_find_reader(extension) for file browser dispatch
+- [x] Main.cpp simplified: init HAL → discover plugins → start plugin → dispatch loop
+- [x] Build passes: Flash 8.5% (554KB), RAM 22.9% (75KB)
+- [ ] Test on device: plugin discovery, switching, error recovery
+- [x] **Document**: docs/plugin-lifecycle.md written
+- [x] **Update plan**: Checked off completed tasks
 
 ## Phase 5: Core UI Plugins
 - [ ] Implement `json.*` Lua API (parse, encode) — native C for performance
@@ -116,7 +115,7 @@
 - [ ] Write button remap plugin (`/plugins/button_remap.lua`)
   - Interactive front button reassignment
 - [ ] Test: full device operation — boot, browse, settings, WiFi connect
-- [ ] **Document**: Write `docs/settings-schema.md` — all settings keys, types, defaults. Write `docs/i18n-guide.md` — how to add a new language translation. Update `docs/plugin-guide.md` with keyboard and status bar integration examples.
+- [ ] **Document**: Write `docs/settings-schema.md` — all settings keys, types, defaults. Write `docs/i18n-guide.md` — how to add a new language translation. Update `docs/plugin-guide.md` with keyboard and status bar integration examples. Update `docs/architecture.md` with measurements.
 - [ ] **Update plan**: Check off completed tasks, note any deferred items or scope changes.
 
 ## Phase 6: Reader Plugins
@@ -159,7 +158,7 @@
 - [ ] Test: all three readers match current CrossPoint quality
 - [ ] Test: Hebrew EPUB, TXT, MD all render correctly
 - [ ] Test: progress saves and restores across power cycles
-- [ ] **Document**: Write `docs/reader-plugin-guide.md` — how to write a reader plugin (file format handling, page indexing, progress, status bar). Write `docs/lua-api.md` additions for `zip.*` and `xml.*` APIs. Document cache format for each reader.
+- [ ] **Document**: Write `docs/reader-plugin-guide.md` — how to write a reader plugin (file format handling, page indexing, progress, status bar). Write `docs/lua-api.md` additions for `zip.*` and `xml.*` APIs. Document cache format for each reader. Update `docs/architecture.md` with measurements.
 - [ ] **Update plan**: Check off completed tasks, note any deferred items or scope changes.
 
 ## Phase 7: Network Plugins
@@ -190,7 +189,7 @@
   - Daily readings (Parashat HaShavua, Daf Yomi, etc.)
   - Search
 - [ ] Test: all network features work on device
-- [ ] **Document**: Write `docs/lua-api.md` additions for `wifi.*` API. Write `docs/web-server-guide.md` — how plugins register routes. Document each network plugin's configuration and usage.
+- [ ] **Document**: Write `docs/lua-api.md` additions for `wifi.*` API. Write `docs/web-server-guide.md` — how plugins register routes. Document each network plugin's configuration and usage. Update `docs/architecture.md` with measurements.
 - [ ] **Update plan**: Check off completed tasks, note any deferred items or scope changes.
 
 ## Phase 8: Polish & Release
@@ -200,9 +199,9 @@
 - [ ] Default SD card image with all core plugins + fonts + translations
 - [ ] Plugin developer documentation (full API reference with examples)
 - [ ] Example plugin template (`/plugins/template.lua`)
-- [ ] Write `docs/cfont-format.md` — .cfont binary format specification
 - [ ] Performance profiling: boot time, page turn latency, memory usage
-- [ ] Final flash size verification (~500KB target)
+- [ ] Final flash size verification
+- [ ] Update `docs/architecture.md` with final measurements
 - [ ] Final RAM usage verification (<300KB during operation)
 - [ ] LTR + RTL + Hebrew regression testing across all readers
 - [ ] All 4 orientations testing

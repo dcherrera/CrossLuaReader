@@ -1,0 +1,9 @@
+{
+    "name": "plugin",
+    "version": "1.0.0",
+    "dependencies": {
+        "lua_api": "*",
+        "hal": "*",
+        "renderer": "*"
+    }
+}

@@ -110,12 +110,13 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 | 1 - HAL + renderer | 376KB (5.7%) | 68KB (20.9%) | Hardware, pixels |
 | 2 - Font system | 396KB (6.0%) | 71KB (21.7%) | .cfont, loader, cache, renderer, BiDi |
 | 3 - Lua interpreter | 552KB (8.4%) | 71KB (21.7%) | Lua 5.4 + all API bindings |
+| 4 - Plugin manager | 554KB (8.5%) | 75KB (22.9%) | Discovery, lifecycle, switching |
 
 ### Projected (full runtime with Lua + fonts)
 
 | Region | Size | Usage |
 |--------|------|-------|
-| Flash | ~500KB | C runtime + Lua interpreter |
+| Flash | ~554KB | C runtime + Lua interpreter + plugin manager |
 | DRAM | ~380KB total | |
 | — Arduino/ESP-IDF base | ~68KB | Measured Phase 1 baseline |
 | — Lua state | ~50KB | Interpreter + script state |
