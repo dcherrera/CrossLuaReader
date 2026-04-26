@@ -215,20 +215,22 @@ Menu items format: `{ {label="Browse Files"}, {label="Settings"} }`
 Button hints: pass a table of 4 strings for the 4 front buttons `{Back, Confirm, Left, Right}`. Use `""` for empty buttons. Rendered as bordered cells matching CrossPoint's button hint bar.
 
 ### lib.buttons
-Shared button label definitions. Edit this one file to customize labels everywhere.
+Orientation-aware button mapping and hint labels. Maps logical actions (up, down, left, right, back, confirm) to physical buttons per orientation.
 
 ```lua
 local buttons = require("lib.buttons")
 
--- Pre-defined layouts:
-ui.draw_button_hints(font_id, buttons.home)     -- {"Back", "Select", "", ""}
-ui.draw_button_hints(font_id, buttons.browser)   -- {"Back", "Open", "", ""}
-ui.draw_button_hints(font_id, buttons.settings)   -- {"Back", "Change", "", ""}
-ui.draw_button_hints(font_id, buttons.reader)     -- {"Back", "", "Prev", "Next"}
-ui.draw_button_hints(font_id, buttons.confirm)    -- {"Cancel", "OK", "", ""}
+-- Get hint labels for the 4 front buttons (orientation-aware):
+ui.draw_button_hints(font_id, buttons.get("home", orientation))
+ui.draw_button_hints(font_id, buttons.get("browser", orientation))
+ui.draw_button_hints(font_id, buttons.get("settings", orientation))
+ui.draw_button_hints(font_id, buttons.get("reader", orientation))
+
+-- Apply button remap for an orientation (call on boot and orientation change):
+input.setMapping(buttons.get_mapping(orientation))
 ```
 
-To customize button labels globally, edit `/plugins/lib/buttons.lua`.
+Format in buttons.lua is `logical_action = "physical_button"` — read as "to perform [action], press [button]". Edit `/plugins/lib/buttons.lua` to customize mappings or labels.
 
 ### lib.status_bar
 Reader status bar for book progress.

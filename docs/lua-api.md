@@ -99,25 +99,31 @@ Button state queries and constants.
 No-op — the main loop polls buttons automatically before calling your `loop()`. This function exists for API compatibility but does nothing. **Do not call `hal_gpio_poll()` manually** — it would clear button edge states.
 
 ### input.isPressed(button) → bool
-True if button is currently held down.
+True if the **logical** button is currently held down. Scans all physical buttons through the remap table.
 
 ### input.wasPressed(button) → bool
-True if button was pressed since last frame.
+True if the **logical** button was pressed since last frame. Orientation-aware via `setMapping`.
 
 ### input.wasAnyPressed() → bool
-True if any button was pressed since last `poll()`.
+True if any physical button was pressed since last frame.
 
 ### input.wasReleased(button) → bool
-True if button was released since last `poll()`.
+True if the **logical** button was released since last frame. Orientation-aware via `setMapping`.
 
 ### input.wasAnyReleased() → bool
-True if any button was released since last `poll()`.
+True if any physical button was released since last frame.
 
 ### input.getHeldTime() → int
 Milliseconds the current button(s) have been held.
 
 ### input.waitButton() → int
-Block until a button is pressed. Returns the button ID. Yields to FreeRTOS while waiting.
+Block until a button is pressed. Returns the **logical** button ID (remapped via `setMapping`). Yields to FreeRTOS while waiting.
+
+### input.setMapping(table)
+Set the orientation-aware button remap. The table maps logical actions to physical hardware indices: `{back=0, confirm=1, left=2, right=3, up=4, down=5}`. Internally inverted to a physical→logical lookup table. Called automatically by `home.lua` and `settings.lua` using `buttons.get_mapping(orientation)`.
+
+### input.resetMapping()
+Reset button mapping to identity (physical == logical). No remap.
 
 ### Button Constants
 | Constant | Value | Description |
