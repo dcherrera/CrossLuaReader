@@ -22,11 +22,11 @@ python3 --version
 # PlatformIO (the build tool)
 pip3 install platformio
 
-# Font conversion dependencies
-pip3 install freetype-py fonttools
-
 # ESP32 build dependencies (may be needed)
 pip3 install littlefs-python
+
+# Font conversion dependencies (OPTIONAL — only if regenerating fonts)
+# pip3 install freetype-py fonttools
 ```
 
 **Platform-specific PlatformIO note:**
@@ -40,39 +40,25 @@ git clone https://github.com/dcherrera/CrossLuaReader.git
 cd CrossLuaReader
 ```
 
-## Step 3: Get Font Source Files
+## Step 3: Fonts (Pre-Built — No Conversion Needed)
 
-CrossLua Reader needs TTF font source files to generate .cfont files. These come from the CrossPoint Reader project:
+53 pre-built `.cfont` font files are included in the repository at `sdcard/fonts/`. **No font conversion is required.** The fonts are ready to copy to the SD card.
 
-```bash
-# Clone CrossPoint (for font sources only)
-git clone --recursive https://github.com/crosspoint-reader/crosspoint-reader.git ../crosspoint-reader
-```
+Included fonts:
+- **Bookerly** — 12, 14, 16, 18pt × 4 styles (16 files)
+- **NotoSans** — 12, 14, 16, 18pt × 4 styles + 8pt regular (17 files)
+- **OpenDyslexic** — 8, 10, 12, 14pt × 4 styles (16 files)
+- **Ubuntu** — 10, 12pt × 2 styles (4 files)
 
-The font sources are at `../crosspoint-reader/lib/EpdFont/builtinFonts/source/`. The converter script expects them at this relative path.
+If the user wants to regenerate fonts (e.g., to add Hebrew or custom fonts), they can use `tools/cfont-convert/convert_all.sh` with the CrossPoint font sources. But this is optional — the pre-built fonts work out of the box.
 
-If the user already has CrossPoint cloned, just verify the path.
-
-## Step 4: Convert Fonts to .cfont Format
-
-```bash
-cd tools/cfont-convert
-bash convert_all.sh
-cd ../..
-```
-
-This generates `.cfont` files in `sdcard/fonts/`. Expected output: ~50 font files (Bookerly, NotoSans, NotoSansHebrew, OpenDyslexic, Ubuntu in multiple sizes/styles).
-
-**If font conversion fails:**
-- Check that freetype-py is installed: `python3 -c "import freetype"`
-- Check that font source path exists: `ls ../crosspoint-reader/lib/EpdFont/builtinFonts/source/`
-- The converter may print "python: command not found" — edit `convert_all.sh` to use `python3` instead of `python`
-
-## Step 5: Build the Firmware
+## Step 4: Build the Firmware
 
 ```bash
 pio run
 ```
+
+**Note:** Font conversion dependencies (freetype-py, fonttools) are NOT needed for a standard install since fonts are pre-built.
 
 **Expected output:** Build succeeds, firmware at `.pio/build/default/firmware.bin`
 **Expected size:** Flash ~555KB (8.5%), RAM ~75KB (22.9%)

@@ -82,22 +82,25 @@
 - [x] **Document**: docs/plugin-lifecycle.md written
 - [x] **Update plan**: Checked off completed tasks
 
-## Phase 5: Core UI Plugins (in progress)
-- [x] Extended renderer: `renderer_fill_rounded_rect()` (midpoint circle algorithm)
-- [x] Extended display API: `fillRoundedRect`, `drawTextInverted`, `setOrientation`, `getOrientation`
+## Phase 5: Core UI Plugins ✅
+- [x] Extended renderer: `renderer_fill_rounded_rect()`, `renderer_fill_rect_gray()`, `renderer_fill_rounded_rect_gray()`
+- [x] Extended display API: `fillRoundedRect`, `fillRoundedRectGray`, `drawTextInverted`, `setOrientation`, `getOrientation`
+- [x] All display coordinate params accept floats (Lua 5.4 division fix)
+- [x] Fixed input.poll() double-poll clearing button states (now no-op, main loop handles it)
 - [x] Shared Lua modules:
-  - `plugins/lib/theme.lua` — Lyra/Classic metrics (row heights, padding, corner radius)
-  - `plugins/lib/ui.lua` — draw_header, draw_menu, draw_list, draw_button_hints
+  - `plugins/lib/theme.lua` — Lyra/Classic metrics
+  - `plugins/lib/ui.lua` — gray dithered selection, CrossPoint-style 4-button hint bar
   - `plugins/lib/status_bar.lua` — battery, page count, progress, title
+  - `plugins/lib/buttons.lua` — shared button label definitions per context
 - [x] Home screen plugin (`plugins/home.lua`) — menu with Continue Reading, Browse Files, Settings
 - [x] File browser plugin (`plugins/file_browser.lua`) — directory nav, file filtering, reader dispatch
 - [x] Settings plugin (`plugins/settings.lua`) — font size, orientation, margin, refresh, theme
 - [x] Template system: `templates/home_lyra.lua`, `templates/home_classic.lua`
 - [x] Build passes: Flash 8.5% (555KB), RAM 22.9% (75KB)
-- [ ] Deferred to later: json.* API, i18n.* API, keyboard plugin, WiFi manager, button remap
-- [ ] Test on device: home → browser → settings → back flow
-- [ ] **Document**: Update `docs/lua-api.md` with new display functions. Update `docs/architecture.md` with measurements.
-- [ ] **Update plan**: Check off completed tasks, note deferred items.
+- [x] Tested on device: home screen renders, navigation works, file browser lists SD contents
+- [x] **Document**: Updated lua-api.md and plugin-guide.md
+- [x] **Update plan**: Completed
+- Deferred to later: json.* API, i18n.* API, keyboard plugin, WiFi manager, button remap
 
 ## Phase 6: Reader Plugins
 - [ ] Implement `zip.*` C API (open, list, read, close) — wraps miniz/uzlib
