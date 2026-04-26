@@ -22,6 +22,8 @@ local defaults = {
     theme = "lyra",
     buttonLayout = "default",
     sleepTimeout = 10,
+    sleepMode = "blank",
+    sleepWallpaper = "",
     language = "en",
 }
 

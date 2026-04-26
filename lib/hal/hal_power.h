@@ -46,5 +46,8 @@ void hal_power_set_sleep_timeout(uint32_t minutes);
  */
 void hal_power_suppress_sleep(bool suppress);
 
+/** @return true if USB is connected (suppresses auto-sleep). */
+bool hal_power_is_usb_connected(void);
+
 /** Enter deep sleep immediately. Does not return. */
 void hal_power_enter_sleep(void);

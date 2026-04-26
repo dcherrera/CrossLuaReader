@@ -232,7 +232,37 @@ Enter deep sleep. Does not return. Wake with power button.
 Set the auto-sleep timeout. `minutes`: 1-60. `0` = disable auto-sleep.
 
 ### system.suppressSleep(bool)
-Suppress or restore auto-sleep. Use when WiFi server is active, USB is connected, or during downloads. `true` = prevent sleep, `false` = restore.
+Suppress or restore auto-sleep. Use when WiFi server is active or during downloads. `true` = prevent sleep, `false` = restore. Note: USB connection is auto-detected and suppresses sleep automatically.
+
+### system.setSleepMode(mode)
+Set the sleep screen mode. `mode`: `0` = blank (white screen), `1` = single wallpaper, `2` = cycle through `/wallpapers/`, `3` = random from `/wallpapers/`, `4` = clear (keep current page, overlay "SLEEP" text). Called from home plugin on boot to push persisted setting to C.
+
+### system.setSleepWallpaper(filename)
+Set the wallpaper filename for single mode (e.g., `"sunset.bmp"`). The file must exist in `/wallpapers/` on the SD card.
+
+### system.setSleepHook(func)
+Register a Lua callback that runs after the base sleep screen renders but before the display refresh. The callback can draw anything to the framebuffer using `display.drawText()`, `display.fillRect()`, etc. Pass `nil` to clear the hook.
+
+The hook is automatically cleared when the plugin exits or crashes. If the hook itself errors, the error is logged and sleep proceeds normally.
+
+```lua
+-- Example: quote overlay on sleep screen
+system.setSleepHook(function()
+    local f = fonts.reader or fonts.ui
+    if not f then return end
+    -- Draw a bordered box near the bottom
+    display.fillRect(20, 620, 440, 100)       -- white fill
+    display.drawRect(20, 620, 440, 100)       -- black border
+    display.drawText(f, 30, 630, '"Be the change you wish to see."')
+    display.drawText(f, 30, 670, "— Gandhi")
+end)
+
+-- Clear the hook:
+system.setSleepHook(nil)
+```
+
+### system.reload()
+Re-initialize the SD card and restart the plugin system from home. Use after SD card hot-swap. Also triggered automatically by holding the power button for >2 seconds.
 
 **Example:**
 ```lua

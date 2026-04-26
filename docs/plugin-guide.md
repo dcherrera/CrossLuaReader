@@ -265,6 +265,38 @@ local status_bar = require("lib.status_bar")
 status_bar.draw(font_id, progress_pct, current_page, total_pages, "Book Title")
 ```
 
+## Sleep & Error Recovery
+
+### Crash Recovery
+If your plugin's `loop()` function throws a Lua error, the device shows a crash screen with the error message and waits for the user to press any button, then returns to home. Your plugin is stopped but not disabled — it can be launched again.
+
+### Sleep Screen
+Users can drop BMP images into `/wallpapers/` on the SD card. The settings plugin lets them choose the sleep screen mode (blank, single wallpaper, cycle, random, or stay-on-page).
+
+### Sleep Hook (Custom Sleep Content)
+Plugins can register a callback to draw custom content on the sleep screen:
+
+```lua
+system.setSleepHook(function()
+    -- Draw after the base sleep screen (wallpaper/blank/clear) renders,
+    -- before the display refresh. Use any display.* API.
+    display.fillRect(20, 600, 440, 120)
+    display.drawRect(20, 600, 440, 120)
+    display.drawText(fonts.reader, 30, 610, quote_text)
+end)
+```
+
+The hook is cleared automatically on plugin exit. Errors in the hook are caught and logged — they don't prevent sleep.
+
+### Power Button
+- Short press (0.5-2s): Manual sleep
+- Long press (>2s): SD card reload — re-mounts SD and restarts plugins from home. Useful after editing Lua files without reflashing.
+
+### SD Reload from Lua
+```lua
+system.reload()  -- reinit SD card and restart from home
+```
+
 ## Templates
 
 Home screen templates live in `/templates/` on the SD card. To customize:

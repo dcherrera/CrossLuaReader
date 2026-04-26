@@ -91,3 +91,9 @@ const char *plugin_manager_active_id(void);
  * @return          Index of the reader plugin, or -1 if none found
  */
 int plugin_manager_find_reader(const char *extension);
+
+/**
+ * Re-scan plugins from SD card. Stops active plugin, clears list,
+ * re-discovers from /plugins/. Use after SD card hot-swap.
+ */
+void plugin_manager_reinit(void);

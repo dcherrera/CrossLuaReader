@@ -20,10 +20,13 @@ CrossLuaReader/
 │   │   ├── hal_display.c/h     # E-ink SPI display driver
 │   │   ├── hal_gpio.c/h        # Button input, ISR handling
 │   │   ├── hal_storage.c/h     # SD card file I/O
-│   │   ├── hal_power.c/h       # Battery, sleep, watchdog
-│   │   └── hal_system.c/h      # Boot, restart, heap stats
+│   │   ├── hal_power.c/h       # Battery, sleep, USB detection
+│   │   ├── hal_system.c/h      # Boot, restart, heap stats
+│   │   ├── boot_font.c/h       # Boot-time font for crash/sleep screens
+│   │   └── sleep_screen.c/h    # Sleep screen modes + wallpaper rendering
 │   ├── renderer/           # Framebuffer rendering (pure C)
-│   │   └── renderer.c/h        # Pixel, line, rect, polygon drawing
+│   │   ├── renderer.c/h        # Pixel, line, rect, polygon drawing
+│   │   └── bmp_decoder.c/h     # Streaming BMP-to-framebuffer decoder
 │   ├── font/               # Font loading and text rendering (pure C)
 │   │   ├── font_manager.c/h    # Multi-font slot management + fallback chains
 │   │   ├── font_loader.c/h     # .cfont file parser
@@ -121,6 +124,7 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 | 5 - Core UI plugins | 555KB (8.5%) | 75KB (22.9%) | Home, browser, settings + renderer additions |
 | 6 - Settings & persistence | 562KB (8.6%) | 75KB (22.9%) | Settings, fonts, progress, sleep, physical button bar, content area |
 | 7 - Font fallback & language packs | 564KB (8.6%) | 75KB (22.9%) | Per-slot font fallback, language pack discovery, UI translation |
+| 8 - Sleep screen & error recovery | 568KB (8.7%) | 77KB (23.6%) | Boot font, crash screen, BMP wallpapers, SD reload, USB detection |
 
 ### Projected (full runtime with Lua + fonts)
 
@@ -159,6 +163,31 @@ The settings plugin auto-discovers language packs. The `lib/lang.lua` module pro
 
 See `docs/language-packs.md` for the full specification.
 See `docs/cfont-format.md` for the binary font format specification.
+
+## Sleep Screen
+
+A boot font (NotoSans-12) is loaded in C at startup (font slot 0) before any Lua runs. This enables text rendering for crash screens and sleep overlays without depending on Lua.
+
+Sleep screen modes (set via `system.setSleepMode()` from Lua):
+- **Blank** — clear screen to white
+- **Single** — show a specific BMP wallpaper from `/wallpapers/`
+- **Cycle** — show wallpapers in order, advancing each sleep
+- **Random** — random pick from `/wallpapers/`
+- **Clear** — keep current page content, overlay "SLEEP" + battery %
+
+The BMP decoder (`lib/renderer/bmp_decoder.c`) streams images from SD row-by-row with Bayer 4x4 ordered dithering for 24-bit→1-bit conversion. No full-image allocation.
+
+Plugins can register a Lua callback via `system.setSleepHook(func)` to draw custom content (text, boxes, images) on top of the sleep screen. The hook runs after the base screen renders but before the display refresh. This enables features like quote overlays. The hook is auto-cleared on plugin exit and errors are caught safely.
+
+## Error Recovery
+
+When `plugin.loop()` raises a Lua error, the plugin manager catches it via `lua_pcall`, stops the plugin, and shows a crash screen with the plugin name and error message using the boot font. The user presses any button to return to home. This ensures the device never gets stuck on a crashed plugin.
+
+## Power Button
+
+- **Short press** (0.5-2s): Enter deep sleep with sleep screen
+- **Long press** (>2s): Re-initialize SD card and restart plugins from home (SD hot-swap reload)
+- **Auto-sleep**: Configurable timeout, auto-suppressed when USB is connected
 
 ## Plugin API
 

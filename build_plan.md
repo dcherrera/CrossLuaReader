@@ -78,49 +78,26 @@
 - [x] **Document**: Written `docs/language-packs.md`, updated `docs/lua-api.md`, `docs/plugin-guide.md`, `docs/architecture.md`
 - [x] **Update plan**: Completed
 
-## Phase 8: Sleep Screen & Error Recovery
+## Phase 8: Sleep Screen & Error Recovery ✅
 
-- \[ \] Sleep screen system
-
+- [x] Boot font: NotoSans-12 loaded at C startup (slot 0), before Lua, for crash/sleep text
+- [x] Plugin crash screen: shows plugin name + error message, waits for button, restarts home
+- [x] BMP decoder: streaming row-by-row from SD, Bayer 4x4 dithering, supports 1/8/24-bit uncompressed
+- [x] Sleep screen system: 5 modes (blank, single wallpaper, cycle, random, clear/stay-on-page)
   - `/wallpapers/` folder on SD — user drops BMP images
-
-  - Settings: single wallpaper, cycle (top-to-bottom loop), random, or clear (stay on page)
-
-  - "Clear sleep" for reading: stays on current page, "SLEEP" text by page count
-
-  - Trigger: long-hold power button OR idle timeout
-
-  - C-side: render sleep screen before entering deep sleep
-
-- \[ \] Plugin crash screen (C-side, no Lua needed)
-
-  - Shows offending plugin name + error message
-
-  - "Press Confirm to return to Home"
-
-  - C side loads UI font at boot (before Lua) for crash screen rendering
-
-  - Never leaves user stuck — always recovers to home
-
-- \[ \] Plugin manager UI in settings
-
-  - List all discovered plugins: system (always on) vs user (manual activation)
-
-  - Show dependencies, block activation if missing
-
-  - RAM usage bar
-
-  - File extension priority (which reader handles .txt, .epub, etc.)
-
-  - Plugin on/off persists via settings
-
-- \[ \] USB connection detection — suppress auto-sleep when USB connected
-
-- \[ \] Test: sleep screen renders, crash recovery works, plugin manager functional
-
-- \[ \] **Document**: Update `docs/plugin-guide.md` with manifest extensions. Update `docs/architecture.md`.
-
-- \[ \] **Update plan**: Check off completed tasks.
+  - Cycle index persists to `/crosslua_sleep_idx.txt` across deep sleep
+  - Clear mode overlays "SLEEP" + battery % on current page content
+- [x] Power button: short press (0.5-2s) = sleep, long press (>2s) = SD reload + restart
+- [x] SD card reload: `hal_storage_reinit()` + `plugin_manager_reinit()`, exposed as `system.reload()`
+- [x] USB connection detection: auto-suppresses sleep when USB connected
+- [x] Lua API: `system.setSleepMode()`, `system.setSleepWallpaper()`, `system.reload()`
+- [x] Settings plugin: sleep mode menu item (blank/wallpaper/cycle/random/stay-on-page)
+- [x] Home plugin: pushes sleep settings to C on boot
+- [ ] Plugin manager UI in settings (deferred to later phase)
+- [ ] Test: sleep screen renders, crash recovery works, SD reload works
+- [x] Build passes: Flash 8.7% (568KB), RAM 23.6% (77KB)
+- [x] **Document**: Updated `docs/lua-api.md`, `docs/plugin-guide.md`, `docs/architecture.md`
+- [x] **Update plan**: Completed
 
 ## Phase 9: Reader Plugins
 

@@ -27,6 +27,11 @@ bool bridge_storage_ready(void) {
     return SDCardManager::getInstance().ready();
 }
 
+bool bridge_storage_reinit(void) {
+    sd_initialized = false;
+    return bridge_storage_init();
+}
+
 bool bridge_storage_exists(const char *path) {
     return SDCardManager::getInstance().exists(path);
 }

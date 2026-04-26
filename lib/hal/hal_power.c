@@ -10,9 +10,11 @@
 #include "hal_power.h"
 #include "hal_gpio.h"
 #include "hal_display.h"
+#include "sleep_screen.h"
 #include "logging.h"
 
 #include "esp_timer.h"
+#include "hal/usb_serial_jtag_ll.h"
 
 /* Bridge function declarations */
 extern void bridge_battery_init(uint8_t adc_pin, float divider);
@@ -92,6 +94,12 @@ void hal_power_check_sleep(void) {
         return;
     }
 
+    /* Suppress sleep while USB is connected */
+    if (hal_power_is_usb_connected()) {
+        last_activity_ms = (uint32_t)(esp_timer_get_time() / 1000);
+        return;
+    }
+
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
     if (now - last_activity_ms > sleep_timeout_ms) {
         LOG_INF("PWR", "Auto-sleep after %u ms idle", sleep_timeout_ms);
@@ -99,8 +107,13 @@ void hal_power_check_sleep(void) {
     }
 }
 
+bool hal_power_is_usb_connected(void) {
+    return usb_serial_jtag_ll_txfifo_writable();
+}
+
 void hal_power_enter_sleep(void) {
     LOG_INF("PWR", "Entering deep sleep");
+    sleep_screen_render();
     hal_display_deep_sleep();
     hal_gpio_start_deep_sleep();
 }

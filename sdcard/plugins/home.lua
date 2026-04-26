@@ -29,6 +29,12 @@ function plugin.onEnter()
     theme.set(settings.get("theme", "lyra"))
     system.setSleepTimeout(settings.get("sleepTimeout", 10))
 
+    -- Apply sleep screen settings
+    local mode_map = {blank=0, single=1, cycle=2, random=3, clear=4}
+    system.setSleepMode(mode_map[settings.get("sleepMode", "blank")] or 0)
+    local wp = settings.get("sleepWallpaper", "")
+    if wp ~= "" then system.setSleepWallpaper(wp) end
+
     -- Apply button mapping for this orientation
     input.setMapping(buttons.get_mapping(orient))
 

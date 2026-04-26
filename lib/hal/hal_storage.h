@@ -33,6 +33,9 @@ bool hal_storage_init(void);
 /** @return true if SD card is mounted and ready. */
 bool hal_storage_ready(void);
 
+/** Re-initialize SD card (for hot-swap / reload). @return true on success. */
+bool hal_storage_reinit(void);
+
 /** @return true if path exists on SD card. */
 bool hal_storage_exists(const char *path);
 

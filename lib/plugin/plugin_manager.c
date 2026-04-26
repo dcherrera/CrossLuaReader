@@ -10,14 +10,24 @@
 #include "plugin_manager.h"
 #include "api_register.h"
 #include "hal_storage.h"
+#include "hal_gpio.h"
+#include "hal_display.h"
 #include "renderer.h"
+#include "boot_font.h"
+#include "sleep_screen.h"
+#include "font_manager.h"
+#include "font_render.h"
 #include "logging.h"
 
 #include "lua.h"
 #include "lauxlib.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 /* ── State ──────────────────────────────────────────────────────────── */
 
@@ -422,6 +432,54 @@ bool plugin_manager_start(const char *plugin_id, const char *arg) {
     return true;
 }
 
+/**
+ * Show a crash screen with error info using the boot font.
+ * Waits for user to press Confirm or Back, then restarts home.
+ */
+static void show_crash_screen(const char *plugin_name, const char *error_msg) {
+    int fid = boot_font_get_id();
+
+    /* Force portrait for consistent crash screen layout */
+    renderer_set_orientation(ORIENT_PORTRAIT);
+    renderer_clear_screen(0xFF);
+
+    if (fid >= 0) {
+        const font_data_t *font = font_manager_get(fid);
+        if (font) {
+            int lh = font_render_get_line_height(font);
+            int y = 60;
+
+            font_render_draw_text_fb(fid, 30, y, "Plugin Crashed", true);
+            y += lh + 20;
+
+            renderer_draw_line(30, y, 450, y, true);
+            y += 15;
+
+            char buf[160];
+            snprintf(buf, sizeof(buf), "Plugin: %s", plugin_name);
+            font_render_draw_text_fb(fid, 30, y, buf, true);
+            y += lh + 8;
+
+            snprintf(buf, sizeof(buf), "Error: %.120s", error_msg);
+            font_render_draw_text_fb(fid, 30, y, buf, true);
+            y += lh + 30;
+
+            font_render_draw_text_fb(fid, 30, y, "The plugin has been stopped.", true);
+            y += lh + 10;
+            font_render_draw_text_fb(fid, 30, y, "Press any button to return to Home", true);
+        }
+    }
+
+    hal_display_refresh(REFRESH_FULL);
+
+    /* Wait for any button press */
+    while (1) {
+        hal_gpio_poll();
+        if (hal_gpio_was_any_pressed()) break;
+        vTaskDelay(10);
+    }
+}
+
 void plugin_manager_dispatch_loop(void) {
     if (!active_state) return;
 
@@ -453,13 +511,19 @@ void plugin_manager_dispatch_loop(void) {
     if (err) {
         const char *msg = lua_tostring(active_state, -1);
         LOG_ERR("PLUG", "loop() error: %s", msg ? msg : "?");
+
+        /* Capture info before destroying state */
+        char crash_name[PLUGIN_NAME_MAX];
+        char crash_msg[256];
+        strncpy(crash_name, plugins[active_index].name, PLUGIN_NAME_MAX - 1);
+        crash_name[PLUGIN_NAME_MAX - 1] = '\0';
+        strncpy(crash_msg, msg ? msg : "Unknown error", sizeof(crash_msg) - 1);
+        crash_msg[sizeof(crash_msg) - 1] = '\0';
         lua_pop(active_state, 1);
 
-        /* Show error and stop plugin */
-        renderer_clear_screen(0xFF);
-        /* Can't render text without a font here — just log and stop */
-        LOG_ERR("PLUG", "Plugin crashed, stopping");
         plugin_manager_stop();
+        show_crash_screen(crash_name, crash_msg);
+        plugin_manager_start("home", NULL);
     }
 }
 
@@ -472,6 +536,10 @@ void plugin_manager_stop(void) {
     if (!active_state) return;
 
     call_lifecycle(active_state, "onExit", NULL);
+
+    /* Clear sleep hook before closing state — it holds a ref into this state */
+    sleep_screen_clear_hook();
+
     lua_close(active_state);
     active_state = NULL;
     active_index = -1;
@@ -496,4 +564,12 @@ int plugin_manager_find_reader(const char *extension) {
         }
     }
     return -1;
+}
+
+void plugin_manager_reinit(void) {
+    LOG_INF("PLUG", "Reinitializing plugin manager");
+    plugin_manager_stop();
+    plugin_count = 0;
+    memset(plugins, 0, sizeof(plugins));
+    plugin_manager_init();
 }

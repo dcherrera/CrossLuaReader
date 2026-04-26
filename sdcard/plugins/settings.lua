@@ -30,6 +30,8 @@ local menu_items = {
     { key = "screenMargin",     label = "", values = {0, 5, 10, 15, 20},                       display = {"0", "5", "10", "15", "20"} },
     { key = "refreshFrequency", label = "", values = {1, 5, 10, 15, 30},                       display = {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"} },
     { key = "sleepTimeout",     label = "", values = {1, 5, 10, 15, 30},                       display = {"1 min", "5 min", "10 min", "15 min", "30 min"} },
+    { key = "sleepMode",        label = "", values = {"blank", "single", "cycle", "random", "clear"},
+                                                      display = {"Blank", "Wallpaper", "Cycle", "Random", "Stay on page"} },
 }
 
 local function find_value_index(item)
@@ -65,6 +67,9 @@ local function apply_setting(item, value)
     elseif item.key == "language" then
         lang.load(value)
         fonts.reload_reader()
+    elseif item.key == "sleepMode" then
+        local mode_map = {blank=0, single=1, cycle=2, random=3, clear=4}
+        system.setSleepMode(mode_map[value] or 0)
     end
 end
 

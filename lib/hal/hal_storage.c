@@ -28,6 +28,7 @@ extern void bridge_storage_file_close(void *handle);
 extern void *bridge_storage_dir_open(const char *path);
 extern bool bridge_storage_dir_next(void *handle, char *name_buf, size_t buf_size, bool *is_dir);
 extern void bridge_storage_dir_close(void *handle);
+extern bool bridge_storage_reinit(void);
 
 bool hal_storage_init(void) {
     LOG_INF("SD", "Initializing SD card");
@@ -110,4 +111,15 @@ bool hal_storage_dir_next(hal_dir_t dir, char *name_buf, size_t buf_size, bool *
 
 void hal_storage_dir_close(hal_dir_t dir) {
     bridge_storage_dir_close(dir);
+}
+
+bool hal_storage_reinit(void) {
+    LOG_INF("SD", "Reinitializing SD card");
+    bool ok = bridge_storage_reinit();
+    if (!ok) {
+        LOG_ERR("SD", "SD card reinit failed");
+    } else {
+        LOG_INF("SD", "SD card reinitialized");
+    }
+    return ok;
 }

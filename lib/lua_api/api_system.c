@@ -13,6 +13,9 @@
 
 #include "hal_system.h"
 #include "hal_power.h"
+#include "hal_storage.h"
+#include "sleep_screen.h"
+#include "plugin_manager.h"
 #include "logging.h"
 
 #include "freertos/FreeRTOS.h"
@@ -94,19 +97,63 @@ static int l_system_suppress_sleep(lua_State *L) {
     return 0;
 }
 
+/* system.setSleepMode(mode) — 0=blank, 1=single, 2=cycle, 3=random, 4=clear */
+static int l_system_set_sleep_mode(lua_State *L) {
+    int mode = (int)lua_tointeger(L, 1);
+    if (mode < 0 || mode > 4) mode = 0;
+    sleep_screen_set_mode((sleep_mode_t)mode);
+    return 0;
+}
+
+/* system.setSleepWallpaper(filename) — set wallpaper for single mode */
+static int l_system_set_sleep_wallpaper(lua_State *L) {
+    const char *name = luaL_checkstring(L, 1);
+    sleep_screen_set_wallpaper(name);
+    return 0;
+}
+
+/* system.setSleepHook(func) — register a Lua callback for custom sleep screen content.
+ * The callback is called after the base sleep screen renders but before display refresh.
+ * It can use display.drawText, display.fillRect, etc. to draw on the sleep screen.
+ * Pass nil to clear the hook. */
+static int l_system_set_sleep_hook(lua_State *L) {
+    if (lua_isnil(L, 1) || lua_isnone(L, 1)) {
+        sleep_screen_clear_hook();
+    } else {
+        luaL_checktype(L, 1, LUA_TFUNCTION);
+        lua_pushvalue(L, 1);  /* push copy of function */
+        int ref = luaL_ref(L, LUA_REGISTRYINDEX);
+        sleep_screen_set_hook(L, ref);
+    }
+    return 0;
+}
+
+/* system.reload() — reinit SD card and restart plugins from home */
+static int l_system_reload(lua_State *L) {
+    (void)L;
+    hal_storage_reinit();
+    plugin_manager_reinit();
+    plugin_manager_start("home", NULL);
+    return 0;
+}
+
 void api_system_register(lua_State *L) {
     static const luaL_Reg funcs[] = {
-        {"freeHeap",         l_system_free_heap},
-        {"totalHeap",        l_system_total_heap},
-        {"batteryPercent",   l_system_battery},
-        {"millis",           l_system_millis},
-        {"delay",            l_system_delay},
-        {"log",              l_system_log},
-        {"version",          l_system_version},
-        {"restart",          l_system_restart},
-        {"sleep",            l_system_sleep},
-        {"setSleepTimeout",  l_system_set_sleep_timeout},
-        {"suppressSleep",    l_system_suppress_sleep},
+        {"freeHeap",            l_system_free_heap},
+        {"totalHeap",           l_system_total_heap},
+        {"batteryPercent",      l_system_battery},
+        {"millis",              l_system_millis},
+        {"delay",               l_system_delay},
+        {"log",                 l_system_log},
+        {"version",             l_system_version},
+        {"restart",             l_system_restart},
+        {"sleep",               l_system_sleep},
+        {"setSleepTimeout",     l_system_set_sleep_timeout},
+        {"suppressSleep",       l_system_suppress_sleep},
+        {"setSleepMode",        l_system_set_sleep_mode},
+        {"setSleepWallpaper",   l_system_set_sleep_wallpaper},
+        {"setSleepHook",        l_system_set_sleep_hook},
+        {"reload",              l_system_reload},
         {NULL, NULL}
     };
     luaL_newlib(L, funcs);
