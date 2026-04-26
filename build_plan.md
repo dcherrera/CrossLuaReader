@@ -1,122 +1,118 @@
-# Build Plan: Lua Plugin Runtime (C Runtime + C++ SDK Bridge)
+# Build Plan: CrossLua Reader (C Runtime + C++ SDK Bridge)
 
 ## Phase 1: Bare Metal Foundation ✅
-- [x] Create new PlatformIO project targeting ESP32-C3
-  - `platformio.ini` configured for C17, Arduino framework, ESP32-C3
-  - SDK copied into `lib/open-x4-sdk/` (no symlink)
-- [x] Write logging module (`lib/logging/logging.c/h`)
-  - `cl_log_printf()` using ESP-IDF `esp_timer` + `printf`
-  - `LOG_ERR`, `LOG_INF`, `LOG_DBG` macros gated by build flags
-- [x] Write C++ SDK bridge files (`lib/hal/bridge_*.cpp`):
-  - `bridge_display.cpp` — wraps `EInkDisplay` (init, clear, refresh, framebuffer, deep sleep, X3 support)
-  - `bridge_input.cpp` — wraps `InputManager` + `SPI.begin()` + X3/X4 device detection via I2C + deep sleep
-  - `bridge_storage.cpp` — wraps `SDCardManager` with opaque `void*` file/dir handles
-  - `bridge_battery.cpp` — wraps `BatteryMonitor` (ADC percentage + millivolts)
-- [x] Write pure C HAL layer (`lib/hal/hal_*.c/h`):
-  - `hal_system` — ESP-IDF direct: free heap, restart, uptime, version
-  - `hal_gpio` — SPI init, input polling, device detection caching, deep sleep
-  - `hal_display` — X3 auto-config, dimension caching, refresh modes
-  - `hal_storage` — opaque file/dir handles, logged open failures
-  - `hal_power` — battery caching (30s poll), auto-sleep (10min idle)
-- [x] Implement framebuffer renderer (`lib/renderer/renderer.c/h`):
-  - `renderer_draw_pixel` with orientation transforms (4 modes)
-  - `renderer_draw_line` with Bresenham's + h/v optimizations
-  - `renderer_draw_rect`, `renderer_fill_rect`, `renderer_clear_screen`, `renderer_invert_screen`
-  - `renderer_get_viewable_margins` with rotated bezel compensation
-- [x] Build passes: Flash 5.7% (376KB), RAM 20.9% (68KB)
-- [ ] Verify on device: blank screen renders, buttons respond, SD card mounts
-- [x] **Document**: Write `docs/hal-api.md`, update `docs/architecture.md` with measurements
-- [x] **Update plan**: Checked off completed tasks
+- [x] PlatformIO project, logging, SDK bridge files, C HAL layer, framebuffer renderer
+- [x] Build: Flash 5.7% (376KB), RAM 20.9% (68KB)
 
 ## Phase 2: Font System ✅
-- [x] Designed `.cfont` binary format: 32B header + intervals/glyphs/groups/kerning/ligatures + DEFLATE bitmaps
-- [x] Created `tools/cfont-convert/cfont_convert.py` — forked fontconvert.py with `--cfont` output mode
-- [x] Created `tools/cfont-convert/convert_all.sh` — batch conversion for all font families
-- [x] Copied `lib/uzlib/` from CrossPoint — pure C DEFLATE decompressor
-- [x] `lib/font/font_types.h` — C structs (glyph 14B, interval 12B, group 18B, kern 3B, ligature 8B), fp4 macros, combining mark helpers
-- [x] `lib/font/utf8.c/h` — UTF-8 decode/encode, combining mark detection (Latin + Hebrew nikkud)
-- [x] `lib/bidi/bidi.c/h` — RTL detection, grapheme-cluster-aware reversal, bracket mirroring
-- [x] `lib/font/font_loader.c/h` — .cfont loader: single contiguous malloc, pointer setup, validation
-- [x] `lib/font/font_cache.c/h` — 3-slot LRU decompression cache, uzlib DEFLATE, byte-aligned→packed compaction
-- [x] `lib/font/font_render.c/h` — drawText (combining marks, kerning, ligatures, BiDi), getTextAdvance, getTextWidth
-- [x] `lib/font/font_manager.c/h` — 4-slot font ID management
-- [x] Build passes: Flash 6.0% (396KB), RAM 21.7% (71KB). +20KB flash, +3KB RAM over Phase 1.
-- [ ] Test on device: render Latin and Hebrew text from SD-loaded .cfont
-- [ ] Verify: glyph rendering quality matches CrossPoint
-- [x] **Document**: Write `docs/cfont-format.md`, update `docs/architecture.md`
-- [x] **Update plan**: Checked off completed tasks
+- [x] .cfont format, converter, font loader, LRU cache, text renderer, BiDi, UTF-8
+- [x] Build: Flash 6.0% (396KB), RAM 21.7% (71KB)
 
-## Phase 3: Lua Interpreter Integration ✅
-- [x] Added Lua 5.4.7 source to `lib/lua/` (32 .c files, 27 .h files, MIT license)
-  - Patched `luaconf.h` to include `<climits>` for C++ compatibility
-  - Excluded `lua.c` (standalone interpreter) and `luac.c` (compiler)
-- [x] Configured for ESP32-C3: io/os modules excluded via selective registration in `api_register.c`
-  - Opens: base, string, table, math, utf8, coroutine
-  - Excludes: io, os, debug (unnecessary, saves memory)
-- [x] Flash cost: +156KB (396KB → 552KB). RAM: unchanged (state allocated at runtime).
-- [x] Lua API bindings (lib/lua_api/):
-  - `api_display.c/h` — clear, refresh, drawText, drawLine, drawRect, fillRect, width, height, getTextWidth, getLineHeight
-  - `api_input.c/h` — poll, isPressed, wasPressed, wasReleased, getHeldTime, waitButton + button constants
-  - `api_storage.c/h` — read, readBytes, write, exists, mkdir, remove, fileSize, list (directory iteration)
-  - `api_system.c/h` — freeHeap, totalHeap, batteryPercent, millis, delay, log, version, restart, sleep
-  - `api_font.c/h` — load, unload
-  - `api_register.c/h` — creates Lua state, opens safe libs, registers all modules
-- [x] Main.cpp runs `/plugins/init.lua` from SD if present, falls back to test pattern
-- [x] Build passes: Flash 8.4% (552KB), RAM 21.7% (71KB)
-- [ ] Test on device: "Hello World" Lua plugin from SD card
-- [ ] **Document**: Write `docs/lua-api.md`
-- [x] **Update plan**: Checked off completed tasks
+## Phase 3: Lua Interpreter ✅
+- [x] Lua 5.4.7, API bindings (display, input, storage, system, font), SD file loading
+- [x] Build: Flash 8.4% (552KB), RAM 21.7% (71KB)
 
 ## Phase 4: Plugin Manager ✅
-- [x] Plugin discovery: scans `/plugins/` for `.lua` files, parses manifests via temporary Lua states
-- [x] Manifest parsing: reads name, id, type, menuEntry, fileExtensions from plugin table
-- [x] Lifecycle: onEnter(arg), loop(), onExit() called via lua_pcall
-- [x] Switching: stops current (onExit + close state), creates fresh state, loads next, calls onEnter
-- [x] Navigation: plugin.finish(), plugin.navigate(id, arg), plugin.goHome() registered as C functions
-- [x] Error handling: all pcall-wrapped, errors logged, plugin stopped on crash
-- [x] State persistence: active plugin ID saved to /crosslua_state.txt, restored on boot
-- [x] Reader lookup: plugin_manager_find_reader(extension) for file browser dispatch
-- [x] Main.cpp simplified: init HAL → discover plugins → start plugin → dispatch loop
-- [x] Build passes: Flash 8.5% (554KB), RAM 22.9% (75KB)
-- [ ] Test on device: plugin discovery, switching, error recovery
-- [x] **Document**: docs/plugin-lifecycle.md written
-- [x] **Update plan**: Checked off completed tasks
+- [x] Discovery, manifest, lifecycle, switching, navigation, error handling, state persistence
+- [x] Build: Flash 8.5% (554KB), RAM 22.9% (75KB)
 
 ## Phase 5: Core UI Plugins ✅
-- [x] Extended renderer: `renderer_fill_rounded_rect()`, `renderer_fill_rect_gray()`, `renderer_fill_rounded_rect_gray()`
-- [x] Extended display API: `fillRoundedRect`, `fillRoundedRectGray`, `drawTextInverted`, `setOrientation`, `getOrientation`
-- [x] All display coordinate params accept floats (Lua 5.4 division fix)
-- [x] Fixed input.poll() double-poll clearing button states (now no-op, main loop handles it)
-- [x] Shared Lua modules:
-  - `plugins/lib/theme.lua` — Lyra/Classic metrics
-  - `plugins/lib/ui.lua` — gray dithered selection, CrossPoint-style 4-button hint bar
-  - `plugins/lib/status_bar.lua` — battery, page count, progress, title
-  - `plugins/lib/buttons.lua` — shared button label definitions per context
-- [x] Home screen plugin (`plugins/home.lua`) — menu with Continue Reading, Browse Files, Settings
-- [x] File browser plugin (`plugins/file_browser.lua`) — directory nav, file filtering, reader dispatch
-- [x] Settings plugin (`plugins/settings.lua`) — font size, orientation, margin, refresh, theme
-- [x] Template system: `templates/home_lyra.lua`, `templates/home_classic.lua`
-- [x] Build passes: Flash 8.5% (555KB), RAM 22.9% (75KB)
-- [x] Tested on device: home screen renders, navigation works, file browser lists SD contents
-- [x] **Document**: Updated lua-api.md and plugin-guide.md
-- [x] **Update plan**: Completed
-- Deferred to later: json.* API, i18n.* API, keyboard plugin, WiFi manager, button remap
+- [x] Home, file browser, settings, shared modules (theme, ui, buttons, status_bar), templates
+- [x] Gray dithered selection, 4-button CrossPoint-style hints, input fix, float coords
+- [x] Build: Flash 8.5% (555KB), RAM 22.9% (75KB)
+- [x] Tested on device: home screen, navigation, file browser all working
 
-## Phase 6: Reader Plugins
+## Phase 6: Settings & Persistence
+- [ ] Create `plugins/lib/settings.lua` — read/write `/settings.json`, simple JSON parser/encoder
+  - `settings.load()`, `settings.get(key, default)`, `settings.set(key, value)`, `settings.save()`
+  - First boot: sane defaults (English, NotoSans 14, Portrait, Lyra, 10min sleep)
+- [ ] Create `plugins/lib/fonts.lua` — system font manager
+  - `fonts.ui` — Ubuntu 12 (always loaded for UI)
+  - `fonts.reader` — user's choice from settings (family + size)
+  - `fonts.init()` / `fonts.cleanup()` — called in every plugin's onEnter/onExit
+- [ ] Create `plugins/lib/progress.lua` — reading progress persistence
+  - `progress.save(book_path, {page, totalPages, offset, chapter, percentage})`
+  - `progress.load(book_path)` → table or nil
+  - Stored as `{book_path}_progress` alongside the book
+- [ ] Rewrite `plugins/lib/buttons.lua` — pre-defined layouts + custom slot
+  - Pre-defined layouts per orientation (portrait, landscape_cw, inverted, landscape_ccw)
+  - Custom layout slot (only part that gets written by settings)
+  - `buttons.get_mapping(orientation)`, `buttons.get(context)`
+- [ ] Global orientation — applied at boot, affects all screens
+  - Home plugin applies `display.setOrientation(settings.get("orientation", 0))` in onEnter
+  - Settings plugin applies immediately on change
+  - Renderer orientation is C global — persists across plugin switches
+- [ ] Rewrite `plugins/settings.lua` — reads/writes via lib/settings
+  - All settings categories: Display, Reader, Controls, System
+  - Apply changes immediately (orientation, font, theme)
+- [ ] Update `plugins/home.lua` — use lib/fonts and lib/settings
+- [ ] Update `plugins/file_browser.lua` — use lib/fonts
+- [ ] Auto-sleep timer as a setting (default 10min, options: 1, 5, 10, 15, 30)
+  - Expose `hal_power_set_sleep_timeout()` to Lua via `system.setSleepTimeout(minutes)`
+  - USB connected: suppress sleep
+- [ ] Test on device: settings persist across reboot, fonts apply from settings, orientation global
+- [ ] **Document**: Write `docs/settings-schema.md`. Update `docs/lua-api.md`. Update `docs/architecture.md`.
+- [ ] **Update plan**: Check off completed tasks.
+
+## Phase 7: Font Fallback & Language Packs
+- [ ] C-side: add fallback font support to `font_render.c`
+  - `font_render_set_fallback(primary, fallback, fallback_path)` — glyph lookup tries primary → fallback
+  - `font.setFallback(primaryId, fallbackId)` Lua binding
+- [ ] Create `plugins/lib/fonts.lua` `detect_fallbacks(text_sample)` function
+  - Scan text for non-Latin codepoints (Hebrew, Arabic, CJK ranges)
+  - Auto-load language-specific font as fallback from language pack
+- [ ] Language pack system — drop-in `/languages/{code}/` folders
+  - `lang.json`: metadata, direction, font family, unicode ranges, UI string translations
+  - `fonts/`: language-specific .cfont files
+  - Auto-discovered by settings plugin
+- [ ] Ship default language packs: English + Hebrew
+- [ ] Settings: language selection from discovered packs
+- [ ] `settings.tr(key)` — translated UI string, falls back to English
+- [ ] Generate Hebrew language pack fonts (NotoSansHebrew .cfont files with Hebrew ranges)
+- [ ] Test: open Hebrew EPUB with NotoSans selected → auto-falls back to Hebrew font
+- [ ] **Document**: Write `docs/language-packs.md`. Update `docs/lua-api.md`. Update `docs/architecture.md`.
+- [ ] **Update plan**: Check off completed tasks.
+
+## Phase 8: Sleep Screen & Error Recovery
+- [ ] Sleep screen system
+  - `/wallpapers/` folder on SD — user drops BMP images
+  - Settings: single wallpaper, cycle (top-to-bottom loop), random, or clear (stay on page)
+  - "Clear sleep" for reading: stays on current page, "SLEEP" text by page count
+  - Trigger: long-hold power button OR idle timeout
+  - C-side: render sleep screen before entering deep sleep
+- [ ] Plugin crash screen (C-side, no Lua needed)
+  - Shows offending plugin name + error message
+  - "Press Confirm to return to Home"
+  - C side loads UI font at boot (before Lua) for crash screen rendering
+  - Never leaves user stuck — always recovers to home
+- [ ] Plugin manager UI in settings
+  - List all discovered plugins: system (always on) vs user (manual activation)
+  - Show dependencies, block activation if missing
+  - RAM usage bar
+  - File extension priority (which reader handles .txt, .epub, etc.)
+  - Plugin on/off persists via settings
+- [ ] USB connection detection — suppress auto-sleep when USB connected
+- [ ] Test: sleep screen renders, crash recovery works, plugin manager functional
+- [ ] **Document**: Update `docs/plugin-guide.md` with manifest extensions. Update `docs/architecture.md`.
+- [ ] **Update plan**: Check off completed tasks.
+
+## Phase 9: Reader Plugins
 - [ ] Implement `zip.*` C API (open, list, read, close) — wraps miniz/uzlib
 - [ ] Implement `xml.*` C API (parse, find, attr, text) — wraps expat or simple SAX
 - [ ] Write shared reader library (`/plugins/lib/reader_utils.lua`)
   - Page turn handling (forward, back, long-press chapter skip)
-  - Progress save/load to SD
-  - Status bar integration
+  - Progress save/load via lib/progress.lua
+  - Status bar integration via lib/status_bar.lua
   - Orientation-aware viewport calculation
-  - Auto-sleep on idle
+  - Screen refresh management (full refresh every N pages, configurable)
+  - Cache directory convention: `/cache/{plugin_id}/`
 - [ ] Write TXT reader plugin (`/plugins/txt_reader.lua`)
   - Streaming file reading (8KB chunks, not full file in memory)
   - Word wrapping with viewport awareness
-  - Page offset indexing and caching
+  - Page offset indexing and caching to `/cache/txt_reader/`
   - RTL detection and right-alignment
-  - Progress persistence
+  - Progress persistence via lib/progress.lua
+  - Font fallback via lib/fonts.lua
 - [ ] Write MD reader plugin (`/plugins/md_reader.lua`)
   - Markdown parsing: headers, bold/italic, lists, blockquotes, code blocks, horizontal rules, links, images, task lists
   - Styled span rendering with BiDi support
@@ -129,63 +125,50 @@
   - Word layout and line breaking (may need native C helper for performance)
   - Justified text with proportional word spacing
   - Chapter navigation and table of contents
-  - Page caching to SD for fast re-open
+  - Page caching to `/cache/epub_reader/`
   - Footnote support with navigation
   - Image display (BMP, JPG via native helper)
   - RTL paragraph detection and right-alignment
   - Embedded style vs user style override
 - [ ] Write chapter selection sub-plugin (`/plugins/chapter_select.lua`)
-  - List chapters from EPUB TOC
-  - Jump to selected chapter
 - [ ] Write go-to-percent sub-plugin (`/plugins/goto_percent.lua`)
-  - Navigate to percentage position in book
-- [ ] Test: all three readers match current CrossPoint quality
-- [ ] Test: Hebrew EPUB, TXT, MD all render correctly
-- [ ] Test: progress saves and restores across power cycles
-- [ ] **Document**: Write `docs/reader-plugin-guide.md` — how to write a reader plugin (file format handling, page indexing, progress, status bar). Write `docs/lua-api.md` additions for `zip.*` and `xml.*` APIs. Document cache format for each reader. Update `docs/architecture.md` with measurements.
-- [ ] **Update plan**: Check off completed tasks, note any deferred items or scope changes.
+- [ ] Test: all three readers work, progress persists, cache clears properly
+- [ ] Test: Hebrew content auto-loads fallback font
+- [ ] **Document**: Write `docs/reader-plugin-guide.md`. Write `docs/lua-api.md` additions for `zip.*` and `xml.*`. Update `docs/architecture.md`.
+- [ ] **Update plan**: Check off completed tasks.
 
-## Phase 7: Network Plugins
+## Phase 10: Network Plugins
 - [ ] Implement `wifi.*` Lua bindings (connect, disconnect, isConnected, getIP, fetch, fetchJson, post, download)
+  - Bridge: `bridge_wifi.cpp` wrapping Arduino WiFi library
+  - HAL: `hal_wifi.c/h`
 - [ ] Write web server plugin (`/plugins/web_server.lua`)
   - Serve file upload page at device IP
   - Drag-and-drop book upload from any browser
   - Device info page (battery, storage, firmware version)
   - Extensible: other plugins can register routes
+  - Sleep suppression while server is active
+  - Possible: C-side FreeRTOS background task for server (allows reading while serving)
 - [ ] Write OPDS browser plugin (`/plugins/opds_browser.lua`)
-  - Configure server URL
-  - Browse catalog, download books
-  - Pagination support
 - [ ] Write KOReader sync plugin (`/plugins/kosync.lua`)
-  - Username/password auth
-  - Push/pull reading progress
-  - Document matching (filename or binary hash)
 - [ ] Write OTA updater plugin (`/plugins/ota_updater.lua`)
-  - Check for firmware updates
-  - Download and flash via OTA partition
-  - Version comparison
 - [ ] Write Calibre connect plugin (`/plugins/calibre.lua`)
-  - Wireless device connection for Calibre desktop
-  - Receive books via Calibre's send-to-device
 - [ ] Write Sefaria browser plugin (`/plugins/sefaria.lua`)
   - Browse text hierarchy (Tanakh, Talmud, Mishnah, etc.)
   - Download chapters/books to SD
   - Daily readings (Parashat HaShavua, Daf Yomi, etc.)
   - Search
 - [ ] Test: all network features work on device
-- [ ] **Document**: Write `docs/lua-api.md` additions for `wifi.*` API. Write `docs/web-server-guide.md` — how plugins register routes. Document each network plugin's configuration and usage. Update `docs/architecture.md` with measurements.
-- [ ] **Update plan**: Check off completed tasks, note any deferred items or scope changes.
+- [ ] **Document**: Write `docs/lua-api.md` additions for `wifi.*`. Write `docs/web-server-guide.md`. Update `docs/architecture.md`.
+- [ ] **Update plan**: Check off completed tasks.
 
-## Phase 8: Polish & Release
-- [ ] Plugin error screen (friendly message, option to disable plugin)
+## Phase 11: Polish & Release
 - [ ] Watchdog timer for runaway Lua scripts
-- [ ] Crash handler — save crash info, display on next boot
-- [ ] Default SD card image with all core plugins + fonts + translations
+- [ ] Default SD card image with all core plugins + fonts + language packs
 - [ ] Plugin developer documentation (full API reference with examples)
 - [ ] Example plugin template (`/plugins/template.lua`)
+- [ ] On-screen keyboard plugin (`/plugins/keyboard.lua`) for text entry
 - [ ] Performance profiling: boot time, page turn latency, memory usage
 - [ ] Final flash size verification
-- [ ] Update `docs/architecture.md` with final measurements
 - [ ] Final RAM usage verification (<300KB during operation)
 - [ ] LTR + RTL + Hebrew regression testing across all readers
 - [ ] All 4 orientations testing
@@ -194,19 +177,21 @@
   - [ ] Image support in EPUB
   - [ ] Reading progress persistence
   - [ ] File browser with nested folders
-  - [ ] Custom sleep screen (dark, light, cover, custom)
+  - [ ] Custom sleep screen (wallpaper/cycle/random/clear)
   - [ ] WiFi book upload
   - [ ] WiFi OTA updates
   - [ ] KOReader sync
   - [ ] Configurable font, layout, display options
-  - [ ] Screen rotation (4 orientations)
+  - [ ] Screen rotation (4 orientations, global)
   - [ ] Status bar customization
-  - [ ] Front button remapping
+  - [ ] Front button remapping with orientation defaults
   - [ ] Anti-aliasing
   - [ ] Footnotes
-  - [ ] Multi-language UI (23 languages)
-  - [ ] Hebrew/RTL support
+  - [ ] Multi-language UI (language packs)
+  - [ ] Hebrew/RTL support with font fallback
   - [ ] Markdown reader
   - [ ] OPDS browser
   - [ ] Calibre wireless
-- [ ] Git init, create GitHub repo, initial commit
+  - [ ] Plugin manager with activation/priority
+- [ ] Update `docs/architecture.md` with final measurements
+- [ ] **Update plan**: Final review.
