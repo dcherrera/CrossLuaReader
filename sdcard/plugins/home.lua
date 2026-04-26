@@ -28,9 +28,13 @@ local menu_items = {
 function plugin.onEnter()
     -- Load and apply persisted settings
     settings.load()
-    display.setOrientation(settings.get("orientation", 0))
+    local orient = settings.get("orientation", 0)
+    display.setOrientation(orient)
     theme.set(settings.get("theme", "lyra"))
     system.setSleepTimeout(settings.get("sleepTimeout", 10))
+
+    -- Apply button mapping for this orientation
+    input.setMapping(buttons.get_mapping(orient))
 
     -- Load fonts from settings
     fonts.init()
@@ -86,7 +90,7 @@ function render()
         local menu_y = cy + t.header_height + t.vertical_spacing
         ui.draw_menu(fonts.ui, menu_items, selected, menu_y)
 
-        ui.draw_button_hints(fonts.ui, buttons.get("home"))
+        ui.draw_button_hints(fonts.ui, buttons.get("home", settings.get("orientation", 0)))
     end
 
     display.refresh()

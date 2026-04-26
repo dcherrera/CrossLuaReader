@@ -17,6 +17,7 @@ plugin = {
 
 local selected = 1
 local needs_render = true
+local needs_full_refresh = false
 
 -- Settings menu items with actual values (not display names)
 local menu_items = {
@@ -51,6 +52,8 @@ local function apply_setting(item, value)
 
     if item.key == "orientation" then
         display.setOrientation(value)
+        input.setMapping(buttons.get_mapping(value))
+        needs_full_refresh = true
     elseif item.key == "theme" then
         theme.set(value)
     elseif item.key == "fontFamily" or item.key == "fontSize" then
@@ -113,10 +116,15 @@ function render()
         local cx, cy, cw, ch = display.contentArea()
         local menu_y = cy + t.header_height + t.vertical_spacing
         ui.draw_menu(fonts.ui, menu_items, selected, menu_y)
-        ui.draw_button_hints(fonts.ui, buttons.get("settings"))
+        ui.draw_button_hints(fonts.ui, buttons.get("settings", settings.get("orientation", 0)))
     end
 
-    display.refresh()
+    if needs_full_refresh then
+        needs_full_refresh = false
+        display.refresh(0)  -- full refresh to clear ghosting
+    else
+        display.refresh()
+    end
 end
 
 function plugin.onExit()

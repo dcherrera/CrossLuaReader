@@ -12,6 +12,7 @@
 #include "lauxlib.h"
 
 #include "hal_display.h"
+#include "hal_gpio.h"
 #include "renderer.h"
 #include "font_manager.h"
 #include "font_render.h"
@@ -24,10 +25,13 @@ static int l_display_clear(lua_State *L) {
     return 0;
 }
 
-/* display.refresh(mode) — 0=full, 1=half, 2=fast. Default fast. */
+/* display.refresh(mode) — 0=full, 1=half, 2=fast. Default fast.
+ * Re-polls buttons after the blocking refresh so presses during
+ * the refresh aren't lost (enables fast menu scrolling). */
 static int l_display_refresh(lua_State *L) {
     int mode = (int)luaL_optinteger(L, 1, 2);
     hal_display_refresh((refresh_mode_t)mode);
+    hal_gpio_poll();  /* capture button state changes during refresh */
     return 0;
 }
 

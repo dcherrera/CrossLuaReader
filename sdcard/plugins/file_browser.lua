@@ -158,7 +158,7 @@ function render()
             ui.draw_list(fonts.ui, entries, selected, list_y, max_visible, scroll_offset)
         end
 
-        ui.draw_button_hints(fonts.ui, buttons.get("browser"))
+        ui.draw_button_hints(fonts.ui, buttons.get("browser", display.getOrientation()))
     end
 
     display.refresh()
