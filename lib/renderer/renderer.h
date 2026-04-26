@@ -90,6 +90,15 @@ void renderer_fill_rect(int x, int y, int w, int h, bool black);
 void renderer_clear_screen(uint8_t color);
 
 /**
+ * Draw a filled rectangle with a dithered gray pattern.
+ * Uses checkerboard pattern — every other pixel is black.
+ *
+ * @param x, y   Top-left corner (logical)
+ * @param w, h   Width and height
+ */
+void renderer_fill_rect_gray(int x, int y, int w, int h);
+
+/**
  * Draw a filled rectangle with rounded corners.
  *
  * @param x, y   Top-left corner (logical)
@@ -98,6 +107,15 @@ void renderer_clear_screen(uint8_t color);
  * @param black  true = black, false = white
  */
 void renderer_fill_rounded_rect(int x, int y, int w, int h, int radius, bool black);
+
+/**
+ * Draw a filled rounded rectangle with dithered gray fill.
+ *
+ * @param x, y   Top-left corner (logical)
+ * @param w, h   Width and height
+ * @param radius Corner radius in pixels
+ */
+void renderer_fill_rounded_rect_gray(int x, int y, int w, int h, int radius);
 
 /** Invert all pixels in the framebuffer. */
 void renderer_invert_screen(void);

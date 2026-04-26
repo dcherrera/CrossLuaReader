@@ -3,6 +3,7 @@
 
 local ui = require("lib.ui")
 local theme = require("lib.theme")
+local buttons = require("lib.buttons")
 
 plugin = {
     name = "Settings",
@@ -115,7 +116,7 @@ function render()
         ui.draw_header(font_id, "Settings")
         local menu_y = t.header_height + t.vertical_spacing
         ui.draw_menu(font_id, menu_items, selected, menu_y)
-        ui.draw_button_hints(font_id, {"< Back", "Change", ""})
+        ui.draw_button_hints(font_id, buttons.settings)
     end
 
     display.refresh()

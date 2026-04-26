@@ -15,6 +15,7 @@
 #include "renderer.h"
 #include "font_manager.h"
 #include "font_render.h"
+#include "logging.h"
 
 /* display.clear(color) — color: 0xFF=white, 0x00=black. Default white. */
 static int l_display_clear(lua_State *L) {
@@ -40,9 +41,11 @@ static int l_display_refresh_full(lua_State *L) {
 /* display.drawText(fontId, x, y, text) */
 static int l_display_draw_text(lua_State *L) {
     int font_id = (int)luaL_checkinteger(L, 1);
-    int x = (int)luaL_checkinteger(L, 2);
-    int y = (int)luaL_checkinteger(L, 3);
+    int x = (int)lua_tonumber(L, 2);  /* accept float from Lua division */
+    int y = (int)lua_tonumber(L, 3);
     const char *text = luaL_checkstring(L, 4);
+
+    LOG_DBG("LDISP", "drawText(fid=%d, x=%d, y=%d, '%s')", font_id, x, y, text);
 
     const font_data_t *font = font_manager_get(font_id);
     const char *path = font_manager_get_path(font_id);
@@ -51,35 +54,36 @@ static int l_display_draw_text(lua_State *L) {
     }
 
     font_render_draw_text(font, path, x, y, text, true);
+    LOG_DBG("LDISP", "drawText done");
     return 0;
 }
 
 /* display.drawLine(x1, y1, x2, y2) */
 static int l_display_draw_line(lua_State *L) {
-    int x1 = (int)luaL_checkinteger(L, 1);
-    int y1 = (int)luaL_checkinteger(L, 2);
-    int x2 = (int)luaL_checkinteger(L, 3);
-    int y2 = (int)luaL_checkinteger(L, 4);
+    int x1 = (int)lua_tonumber(L, 1);
+    int y1 = (int)lua_tonumber(L, 2);
+    int x2 = (int)lua_tonumber(L, 3);
+    int y2 = (int)lua_tonumber(L, 4);
     renderer_draw_line(x1, y1, x2, y2, true);
     return 0;
 }
 
 /* display.drawRect(x, y, w, h) */
 static int l_display_draw_rect(lua_State *L) {
-    int x = (int)luaL_checkinteger(L, 1);
-    int y = (int)luaL_checkinteger(L, 2);
-    int w = (int)luaL_checkinteger(L, 3);
-    int h = (int)luaL_checkinteger(L, 4);
+    int x = (int)lua_tonumber(L, 1);
+    int y = (int)lua_tonumber(L, 2);
+    int w = (int)lua_tonumber(L, 3);
+    int h = (int)lua_tonumber(L, 4);
     renderer_draw_rect(x, y, w, h, true);
     return 0;
 }
 
 /* display.fillRect(x, y, w, h) */
 static int l_display_fill_rect(lua_State *L) {
-    int x = (int)luaL_checkinteger(L, 1);
-    int y = (int)luaL_checkinteger(L, 2);
-    int w = (int)luaL_checkinteger(L, 3);
-    int h = (int)luaL_checkinteger(L, 4);
+    int x = (int)lua_tonumber(L, 1);
+    int y = (int)lua_tonumber(L, 2);
+    int w = (int)lua_tonumber(L, 3);
+    int h = (int)lua_tonumber(L, 4);
     renderer_fill_rect(x, y, w, h, true);
     return 0;
 }
@@ -101,12 +105,16 @@ static int l_display_get_text_width(lua_State *L) {
     int font_id = (int)luaL_checkinteger(L, 1);
     const char *text = luaL_checkstring(L, 2);
 
+    LOG_DBG("LDISP", "getTextWidth(fid=%d, '%s')", font_id, text);
+
     const font_data_t *font = font_manager_get(font_id);
     if (!font) {
         return luaL_error(L, "invalid font id: %d", font_id);
     }
 
-    lua_pushinteger(L, font_render_get_text_advance(font, text));
+    int w = font_render_get_text_advance(font, text);
+    LOG_DBG("LDISP", "getTextWidth = %d", w);
+    lua_pushinteger(L, w);
     return 1;
 }
 
@@ -123,20 +131,31 @@ static int l_display_get_line_height(lua_State *L) {
 
 /* display.fillRoundedRect(x, y, w, h, radius) */
 static int l_display_fill_rounded_rect(lua_State *L) {
-    int x = (int)luaL_checkinteger(L, 1);
-    int y = (int)luaL_checkinteger(L, 2);
-    int w = (int)luaL_checkinteger(L, 3);
-    int h = (int)luaL_checkinteger(L, 4);
-    int r = (int)luaL_optinteger(L, 5, 6);
+    int x = (int)lua_tonumber(L, 1);
+    int y = (int)lua_tonumber(L, 2);
+    int w = (int)lua_tonumber(L, 3);
+    int h = (int)lua_tonumber(L, 4);
+    int r = lua_isnoneornil(L, 5) ? 6 : (int)lua_tonumber(L, 5);
     renderer_fill_rounded_rect(x, y, w, h, r, true);
+    return 0;
+}
+
+/* display.fillRoundedRectGray(x, y, w, h, radius) — dithered gray selection */
+static int l_display_fill_rounded_rect_gray(lua_State *L) {
+    int x = (int)lua_tonumber(L, 1);
+    int y = (int)lua_tonumber(L, 2);
+    int w = (int)lua_tonumber(L, 3);
+    int h = (int)lua_tonumber(L, 4);
+    int r = lua_isnoneornil(L, 5) ? 6 : (int)lua_tonumber(L, 5);
+    renderer_fill_rounded_rect_gray(x, y, w, h, r);
     return 0;
 }
 
 /* display.drawTextInverted(fontId, x, y, text) — white text (for selected items) */
 static int l_display_draw_text_inverted(lua_State *L) {
     int font_id = (int)luaL_checkinteger(L, 1);
-    int x = (int)luaL_checkinteger(L, 2);
-    int y = (int)luaL_checkinteger(L, 3);
+    int x = (int)lua_tonumber(L, 2);
+    int y = (int)lua_tonumber(L, 3);
     const char *text = luaL_checkstring(L, 4);
 
     const font_data_t *font = font_manager_get(font_id);
@@ -175,7 +194,8 @@ void api_display_register(lua_State *L) {
         {"height",         l_display_height},
         {"getTextWidth",      l_display_get_text_width},
         {"getLineHeight",     l_display_get_line_height},
-        {"fillRoundedRect",   l_display_fill_rounded_rect},
+        {"fillRoundedRect",      l_display_fill_rounded_rect},
+        {"fillRoundedRectGray", l_display_fill_rounded_rect_gray},
         {"drawTextInverted",  l_display_draw_text_inverted},
         {"setOrientation",    l_display_set_orientation},
         {"getOrientation",    l_display_get_orientation},

@@ -15,16 +15,16 @@ function M.draw_header(font_id, title)
     local bat = system.batteryPercent()
     local bat_text = bat .. "%"
     local bat_w = display.getTextWidth(font_id, bat_text)
-    display.drawText(font_id, w - bat_w - t.side_padding, t.top_padding, bat_text)
+    display.drawText(font_id, math.floor(w - bat_w - t.side_padding), t.top_padding, bat_text)
 
     -- Title centered if provided
     if title then
         local tw = display.getTextWidth(font_id, title)
-        display.drawText(font_id, (w - tw) / 2, t.top_padding, title)
+        display.drawText(font_id, math.floor((w - tw) / 2), t.top_padding, title)
     end
 end
 
---- Draw a vertical menu with rounded selection highlight.
+--- Draw a vertical menu with gray dithered selection highlight.
 -- @param font_id Font ID for labels
 -- @param items Table of {label=string} entries
 -- @param selected 1-based selected index
@@ -41,16 +41,11 @@ function M.draw_menu(font_id, items, selected, y_start)
         local row_h = t.menu_row_height
 
         if i == selected then
-            -- Selected: filled rounded rect background
-            if t.corner_radius > 0 then
-                display.fillRoundedRect(row_x, y, row_w, row_h, t.corner_radius)
-                display.drawTextInverted(font_id, row_x + t.selection_padding, y + t.selection_padding, item.label)
-            else
-                display.fillRect(row_x, y, row_w, row_h)
-                display.drawTextInverted(font_id, row_x + t.selection_padding, y + t.selection_padding, item.label)
-            end
+            -- Selected: gray dithered fill (text stays readable)
+            display.fillRoundedRectGray(row_x, y, row_w, row_h, t.corner_radius)
+            display.drawText(font_id, row_x + t.selection_padding, math.floor(y + t.selection_padding), item.label)
         else
-            display.drawText(font_id, row_x + t.selection_padding, y + t.selection_padding, item.label)
+            display.drawText(font_id, row_x + t.selection_padding, math.floor(y + t.selection_padding), item.label)
         end
 
         y = y + row_h + t.vertical_spacing
@@ -59,9 +54,9 @@ function M.draw_menu(font_id, items, selected, y_start)
     return y
 end
 
---- Draw a file/item list (similar to menu but for browsing).
+--- Draw a file/item list with gray dithered selection.
 -- @param font_id Font ID for labels
--- @param items Table of {label=string, subtitle=string} entries
+-- @param items Table of {label=string} entries
 -- @param selected 1-based selected index
 -- @param y_start Y position to start
 -- @param max_visible Maximum visible items (for scrolling)
@@ -83,15 +78,10 @@ function M.draw_list(font_id, items, selected, y_start, max_visible, scroll_offs
         local row_h = t.list_row_height
 
         if idx == selected then
-            if t.corner_radius > 0 then
-                display.fillRoundedRect(row_x, y, row_w, row_h, t.corner_radius)
-                display.drawTextInverted(font_id, row_x + t.selection_padding, y + 2, item.label)
-            else
-                display.fillRect(row_x, y, row_w, row_h)
-                display.drawTextInverted(font_id, row_x + t.selection_padding, y + 2, item.label)
-            end
+            display.fillRoundedRectGray(row_x, y, row_w, row_h, t.corner_radius)
+            display.drawText(font_id, row_x + t.selection_padding, math.floor(y + 2), item.label)
         else
-            display.drawText(font_id, row_x + t.selection_padding, y + 2, item.label)
+            display.drawText(font_id, row_x + t.selection_padding, math.floor(y + 2), item.label)
         end
 
         y = y + row_h
@@ -101,29 +91,38 @@ function M.draw_list(font_id, items, selected, y_start, max_visible, scroll_offs
 end
 
 --- Draw button hints at the bottom of the screen.
+-- CrossPoint style: 4 button cells in a row with borders.
 -- @param font_id Font ID for labels
--- @param labels Table with up to 4 strings: {back, confirm, left_hint, right_hint}
+-- @param labels Table with 4 strings: {back, confirm, left, right}
+--               Use "" for empty buttons
 function M.draw_button_hints(font_id, labels)
     local t = theme.get()
     local w = display.width()
     local h = display.height()
-    local y = h - t.button_hints_height
+    local bar_h = t.button_hints_height
+    local y = h - bar_h
 
-    -- Separator line
-    display.drawLine(0, y, w, y)
+    -- Outer border
+    display.drawRect(t.side_padding, y, w - 2 * t.side_padding, bar_h)
 
-    local hint_y = y + 8
+    -- 4 equal-width button cells
+    local cell_w = math.floor((w - 2 * t.side_padding) / 4)
+    local text_y = math.floor(y + (bar_h - display.getLineHeight(font_id)) / 2)
 
-    if labels[1] then
-        display.drawText(font_id, t.side_padding, hint_y, labels[1])
-    end
-    if labels[2] then
-        local tw = display.getTextWidth(font_id, labels[2])
-        display.drawText(font_id, w / 2 - tw / 2, hint_y, labels[2])
-    end
-    if labels[3] then
-        local tw = display.getTextWidth(font_id, labels[3])
-        display.drawText(font_id, w - tw - t.side_padding, hint_y, labels[3])
+    for i = 1, 4 do
+        local cell_x = t.side_padding + (i - 1) * cell_w
+
+        -- Cell divider (skip first)
+        if i > 1 then
+            display.drawLine(cell_x, y, cell_x, y + bar_h)
+        end
+
+        -- Label centered in cell
+        local label = labels[i] or ""
+        if label ~= "" then
+            local tw = display.getTextWidth(font_id, label)
+            display.drawText(font_id, math.floor(cell_x + (cell_w - tw) / 2), text_y, label)
+        end
     end
 end
 

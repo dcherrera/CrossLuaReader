@@ -3,6 +3,7 @@
 
 local ui = require("lib.ui")
 local theme = require("lib.theme")
+local buttons = require("lib.buttons")
 
 plugin = {
     name = "File Browser",
@@ -156,7 +157,7 @@ function render()
             ui.draw_list(font_id, entries, selected, list_y, max_visible, scroll_offset)
         end
 
-        ui.draw_button_hints(font_id, {"< Back", "Open", ""})
+        ui.draw_button_hints(font_id, buttons.browser)
     end
 
     display.refresh()

@@ -169,6 +169,56 @@ void renderer_draw_rect(int x, int y, int w, int h, bool black) {
     renderer_draw_line(x + w - 1, y, x + w - 1, y + h - 1, black); /* right */
 }
 
+void renderer_fill_rect_gray(int x, int y, int w, int h) {
+    for (int row = y; row < y + h; row++) {
+        for (int col = x; col < x + w; col++) {
+            if ((row + col) % 2 == 0) {
+                renderer_draw_pixel(col, row, true);
+            }
+        }
+    }
+}
+
+void renderer_fill_rounded_rect_gray(int x, int y, int w, int h, int radius) {
+    if (radius <= 0) {
+        renderer_fill_rect_gray(x, y, w, h);
+        return;
+    }
+    if (radius > w / 2) radius = w / 2;
+    if (radius > h / 2) radius = h / 2;
+
+    renderer_fill_rect_gray(x + radius, y, w - 2 * radius, h);
+    renderer_fill_rect_gray(x, y + radius, radius, h - 2 * radius);
+    renderer_fill_rect_gray(x + w - radius, y + radius, radius, h - 2 * radius);
+
+    int cx_tl = x + radius, cy_tl = y + radius;
+    int cx_tr = x + w - 1 - radius, cy_tr = y + radius;
+    int cx_bl = x + radius, cy_bl = y + h - 1 - radius;
+    int cx_br = x + w - 1 - radius, cy_br = y + h - 1 - radius;
+    int r = radius, px = 0, py = r, d = 1 - r;
+
+    while (px <= py) {
+        for (int i = cx_tl - py; i <= cx_tl; i++)
+            if ((cy_tl - px + i) % 2 == 0) renderer_draw_pixel(i, cy_tl - px, true);
+        for (int i = cx_tl - px; i <= cx_tl; i++)
+            if ((cy_tl - py + i) % 2 == 0) renderer_draw_pixel(i, cy_tl - py, true);
+        for (int i = cx_tr; i <= cx_tr + py; i++)
+            if ((cy_tr - px + i) % 2 == 0) renderer_draw_pixel(i, cy_tr - px, true);
+        for (int i = cx_tr; i <= cx_tr + px; i++)
+            if ((cy_tr - py + i) % 2 == 0) renderer_draw_pixel(i, cy_tr - py, true);
+        for (int i = cx_bl - py; i <= cx_bl; i++)
+            if ((cy_bl + px + i) % 2 == 0) renderer_draw_pixel(i, cy_bl + px, true);
+        for (int i = cx_bl - px; i <= cx_bl; i++)
+            if ((cy_bl + py + i) % 2 == 0) renderer_draw_pixel(i, cy_bl + py, true);
+        for (int i = cx_br; i <= cx_br + py; i++)
+            if ((cy_br + px + i) % 2 == 0) renderer_draw_pixel(i, cy_br + px, true);
+        for (int i = cx_br; i <= cx_br + px; i++)
+            if ((cy_br + py + i) % 2 == 0) renderer_draw_pixel(i, cy_br + py, true);
+        px++;
+        if (d < 0) { d += 2 * px + 1; } else { py--; d += 2 * (px - py) + 1; }
+    }
+}
+
 void renderer_fill_rect(int x, int y, int w, int h, bool black) {
     for (int row = y; row < y + h; row++) {
         renderer_draw_line(x, row, x + w - 1, row, black);

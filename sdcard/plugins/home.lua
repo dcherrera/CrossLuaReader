@@ -4,6 +4,7 @@
 
 local ui = require("lib.ui")
 local theme = require("lib.theme")
+local buttons = require("lib.buttons")
 
 plugin = {
     name = "Home",
@@ -90,7 +91,7 @@ function render()
 
     -- Button hints
     if font_id then
-        ui.draw_button_hints(font_id, {"", "Select", ""})
+        ui.draw_button_hints(font_id, buttons.home)
     end
 
     display.refresh()

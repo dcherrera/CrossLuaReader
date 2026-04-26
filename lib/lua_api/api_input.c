@@ -16,10 +16,12 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-/* input.poll() — update button states. Call once per frame. */
+/* input.poll() — no-op, main loop already calls hal_gpio_poll().
+ * Kept for API compatibility — plugins can call it but it does nothing. */
 static int l_input_poll(lua_State *L) {
     (void)L;
-    hal_gpio_poll();
+    /* hal_gpio_poll() is called in main loop before dispatch_loop.
+     * Calling it again here would clear the button edge states. */
     return 0;
 }
 
