@@ -112,6 +112,7 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 | 3 - Lua interpreter | 552KB (8.4%) | 71KB (21.7%) | Lua 5.4 + all API bindings |
 | 4 - Plugin manager | 554KB (8.5%) | 75KB (22.9%) | Discovery, lifecycle, switching |
 | 5 - Core UI plugins | 555KB (8.5%) | 75KB (22.9%) | Home, browser, settings + renderer additions |
+| 6 - Settings & persistence | 562KB (8.6%) | 75KB (22.9%) | Settings, fonts, progress, sleep, physical button bar, content area |
 
 ### Projected (full runtime with Lua + fonts)
 

@@ -27,14 +27,14 @@ static int l_input_poll(lua_State *L) {
 
 /* input.isPressed(button) → bool */
 static int l_input_is_pressed(lua_State *L) {
-    int btn = (int)luaL_checkinteger(L, 1);
+    int btn = (int)lua_tointeger(L, 1);
     lua_pushboolean(L, hal_gpio_is_pressed((uint8_t)btn));
     return 1;
 }
 
 /* input.wasPressed(button) → bool */
 static int l_input_was_pressed(lua_State *L) {
-    int btn = (int)luaL_checkinteger(L, 1);
+    int btn = (int)lua_tointeger(L, 1);
     lua_pushboolean(L, hal_gpio_was_pressed((uint8_t)btn));
     return 1;
 }
@@ -47,7 +47,7 @@ static int l_input_was_any_pressed(lua_State *L) {
 
 /* input.wasReleased(button) → bool */
 static int l_input_was_released(lua_State *L) {
-    int btn = (int)luaL_checkinteger(L, 1);
+    int btn = (int)lua_tointeger(L, 1);
     lua_pushboolean(L, hal_gpio_was_released((uint8_t)btn));
     return 1;
 }

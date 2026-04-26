@@ -152,6 +152,41 @@ See `build_spec.md` for the complete API documentation for:
 
 CrossLua Reader ships shared modules in `/plugins/lib/` that plugins can `require`:
 
+### lib.settings
+Persistent settings. All plugins should use this instead of reading/writing JSON directly.
+
+```lua
+local settings = require("lib.settings")
+settings.load()                              -- read from SD (once per plugin)
+local val = settings.get("orientation", 0)   -- get with default
+settings.set("orientation", 1)               -- change in memory
+settings.save()                              -- persist to SD
+```
+
+See `docs/settings-schema.md` for all available keys, types, and defaults.
+
+### lib.fonts
+System font manager. Loads UI and reader fonts based on settings.
+
+```lua
+local fonts = require("lib.fonts")
+fonts.init()                                 -- load fonts from settings (call in onEnter)
+display.drawText(fonts.ui, x, y, "Menu")     -- Ubuntu 12 UI font
+display.drawText(fonts.reader, x, y, "Book") -- user's chosen reader font
+fonts.reload_reader()                        -- reload after font settings change
+fonts.cleanup()                              -- unload (call in onExit)
+```
+
+### lib.progress
+Reading progress persistence. Stores progress alongside book files.
+
+```lua
+local progress = require("lib.progress")
+progress.save("/books/my_book.epub", {page=42, totalPages=210, offset=34567})
+local p = progress.load("/books/my_book.epub")  -- returns table or nil
+progress.clear("/books/my_book.epub")            -- delete saved progress
+```
+
 ### lib.theme
 Theme metrics for consistent layout. Returns Lyra (modern) or Classic constants.
 

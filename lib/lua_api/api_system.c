@@ -44,7 +44,7 @@ static int l_system_millis(lua_State *L) {
 
 /* system.delay(ms) — yield to FreeRTOS for N milliseconds */
 static int l_system_delay(lua_State *L) {
-    int ms = (int)luaL_checkinteger(L, 1);
+    int ms = (int)lua_tointeger(L, 1);
     if (ms > 0) {
         vTaskDelay(ms / portTICK_PERIOD_MS);
     }
@@ -78,17 +78,35 @@ static int l_system_sleep(lua_State *L) {
     return 0;  /* never reached */
 }
 
+/* system.setSleepTimeout(minutes) — set auto-sleep timeout. 0 = disable. */
+static int l_system_set_sleep_timeout(lua_State *L) {
+    int minutes = (int)lua_tonumber(L, 1);
+    if (minutes < 0) minutes = 0;
+    if (minutes > 60) minutes = 60;
+    hal_power_set_sleep_timeout((uint32_t)minutes);
+    return 0;
+}
+
+/* system.suppressSleep(bool) — suppress/restore auto-sleep */
+static int l_system_suppress_sleep(lua_State *L) {
+    bool suppress = lua_toboolean(L, 1);
+    hal_power_suppress_sleep(suppress);
+    return 0;
+}
+
 void api_system_register(lua_State *L) {
     static const luaL_Reg funcs[] = {
-        {"freeHeap",       l_system_free_heap},
-        {"totalHeap",      l_system_total_heap},
-        {"batteryPercent", l_system_battery},
-        {"millis",         l_system_millis},
-        {"delay",          l_system_delay},
-        {"log",            l_system_log},
-        {"version",        l_system_version},
-        {"restart",        l_system_restart},
-        {"sleep",          l_system_sleep},
+        {"freeHeap",         l_system_free_heap},
+        {"totalHeap",        l_system_total_heap},
+        {"batteryPercent",   l_system_battery},
+        {"millis",           l_system_millis},
+        {"delay",            l_system_delay},
+        {"log",              l_system_log},
+        {"version",          l_system_version},
+        {"restart",          l_system_restart},
+        {"sleep",            l_system_sleep},
+        {"setSleepTimeout",  l_system_set_sleep_timeout},
+        {"suppressSleep",    l_system_suppress_sleep},
         {NULL, NULL}
     };
     luaL_newlib(L, funcs);

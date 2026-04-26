@@ -50,11 +50,29 @@ Set the screen orientation. `0` = portrait, `1` = landscape CW, `2` = inverted, 
 ### display.getOrientation() → int
 Returns the current orientation (0-3).
 
+### display.contentArea() → x, y, w, h
+Returns the usable content area bounds, excluding the physical button bar zone. The button bar occupies 40px at the physical bottom of the device, which maps to different logical edges depending on orientation:
+- Portrait: bottom edge → content height reduced
+- Landscape CW: left edge → content x offset increased
+- Inverted: top edge → content y offset increased
+- Landscape CCW: right edge → content width reduced
+
+Use this for all content rendering to prevent overlap with button hints.
+
 ### display.width() → int
 Logical screen width for current orientation.
 
 ### display.height() → int
 Logical screen height for current orientation.
+
+### display.drawLinePhysical(x1, y1, x2, y2)
+Draw a line in physical (portrait) coordinates, bypassing orientation. Used by button hints to always render at the physical bottom.
+
+### display.drawRectPhysical(x, y, w, h)
+Draw a rectangle in physical coordinates.
+
+### display.drawTextPhysical(fontId, x, y, text)
+Draw text in physical coordinates. Used by button hints.
 
 ### display.getTextWidth(fontId, text) → int
 Measure text advance width in pixels.
@@ -203,6 +221,12 @@ Reboot the device. Does not return.
 
 ### system.sleep()
 Enter deep sleep. Does not return. Wake with power button.
+
+### system.setSleepTimeout(minutes)
+Set the auto-sleep timeout. `minutes`: 1-60. `0` = disable auto-sleep.
+
+### system.suppressSleep(bool)
+Suppress or restore auto-sleep. Use when WiFi server is active, USB is connected, or during downloads. `true` = prevent sleep, `false` = restore.
 
 **Example:**
 ```lua

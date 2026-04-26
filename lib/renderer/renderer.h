@@ -117,6 +117,36 @@ void renderer_fill_rounded_rect(int x, int y, int w, int h, int radius, bool bla
  */
 void renderer_fill_rounded_rect_gray(int x, int y, int w, int h, int radius);
 
+/**
+ * Draw a pixel in physical (portrait) coordinates, bypassing orientation.
+ * Used for UI elements that must stay at fixed physical positions
+ * (e.g., button hints at the physical bottom of the device).
+ *
+ * @param x, y   Physical coordinates (portrait: 480x800)
+ * @param black  true = black, false = white
+ */
+void renderer_draw_pixel_physical(int x, int y, bool black);
+
+/**
+ * Draw a line in physical coordinates, bypassing orientation.
+ */
+void renderer_draw_line_physical(int x1, int y1, int x2, int y2, bool black);
+
+/**
+ * Draw a rectangle outline in physical coordinates.
+ */
+void renderer_draw_rect_physical(int x, int y, int w, int h, bool black);
+
+/**
+ * Get the usable content area, excluding the physical button bar.
+ * The button bar occupies 40px at the physical bottom. Depending on
+ * orientation, this maps to a different logical edge.
+ *
+ * @param out_x, out_y  Top-left of content area (logical)
+ * @param out_w, out_h  Width and height of content area
+ */
+void renderer_get_content_area(int *out_x, int *out_y, int *out_w, int *out_h);
+
 /** Invert all pixels in the framebuffer. */
 void renderer_invert_screen(void);
 

@@ -293,6 +293,85 @@ void renderer_fill_rounded_rect(int x, int y, int w, int h, int radius, bool bla
     }
 }
 
+/* ── Physical coordinate drawing (bypasses orientation) ──────────── */
+
+#define BUTTON_BAR_HEIGHT 40
+
+void renderer_draw_pixel_physical(int x, int y, bool black) {
+    /* Portrait transform: same as ORIENT_PORTRAIT */
+    int phyX = y;
+    int phyY = panel_height - 1 - x;
+
+    if (phyX < 0 || phyX >= panel_width || phyY < 0 || phyY >= panel_height) return;
+
+    uint32_t byte_index = (uint32_t)phyY * panel_width_bytes + (phyX / 8);
+    uint8_t bit_pos = 7 - (phyX % 8);
+
+    if (black) {
+        framebuffer[byte_index] &= ~(1 << bit_pos);
+    } else {
+        framebuffer[byte_index] |= (1 << bit_pos);
+    }
+}
+
+void renderer_draw_line_physical(int x1, int y1, int x2, int y2, bool black) {
+    if (y1 == y2) {
+        if (x1 > x2) { int t = x1; x1 = x2; x2 = t; }
+        for (int x = x1; x <= x2; x++) renderer_draw_pixel_physical(x, y1, black);
+        return;
+    }
+    if (x1 == x2) {
+        if (y1 > y2) { int t = y1; y1 = y2; y2 = t; }
+        for (int y = y1; y <= y2; y++) renderer_draw_pixel_physical(x1, y, black);
+        return;
+    }
+    int dx = abs(x2 - x1), dy = -abs(y2 - y1);
+    int sx = (x1 < x2) ? 1 : -1, sy = (y1 < y2) ? 1 : -1;
+    int err = dx + dy;
+    while (1) {
+        renderer_draw_pixel_physical(x1, y1, black);
+        if (x1 == x2 && y1 == y2) break;
+        int e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x1 += sx; }
+        if (e2 <= dx) { err += dx; y1 += sy; }
+    }
+}
+
+void renderer_draw_rect_physical(int x, int y, int w, int h, bool black) {
+    renderer_draw_line_physical(x, y, x + w - 1, y, black);
+    renderer_draw_line_physical(x, y + h - 1, x + w - 1, y + h - 1, black);
+    renderer_draw_line_physical(x, y, x, y + h - 1, black);
+    renderer_draw_line_physical(x + w - 1, y, x + w - 1, y + h - 1, black);
+}
+
+void renderer_get_content_area(int *out_x, int *out_y, int *out_w, int *out_h) {
+    int w = renderer_screen_width();
+    int h = renderer_screen_height();
+    int bar = BUTTON_BAR_HEIGHT + 8;
+
+    switch (current_orient) {
+        case ORIENT_PORTRAIT:
+            /* physical bottom = logical bottom */
+            *out_x = 0; *out_y = 0; *out_w = w; *out_h = h - bar;
+            break;
+        case ORIENT_LANDSCAPE_CW:
+            /* physical bottom = logical left */
+            *out_x = bar; *out_y = 0; *out_w = w - bar; *out_h = h;
+            break;
+        case ORIENT_PORTRAIT_INV:
+            /* physical bottom = logical top */
+            *out_x = 0; *out_y = bar; *out_w = w; *out_h = h - bar;
+            break;
+        case ORIENT_LANDSCAPE_CCW:
+            /* physical bottom = logical right */
+            *out_x = 0; *out_y = 0; *out_w = w - bar; *out_h = h;
+            break;
+        default:
+            *out_x = 0; *out_y = 0; *out_w = w; *out_h = h - bar;
+            break;
+    }
+}
+
 void renderer_clear_screen(uint8_t color) {
     if (framebuffer) {
         memset(framebuffer, color, buffer_size);

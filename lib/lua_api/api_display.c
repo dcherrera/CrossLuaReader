@@ -40,7 +40,7 @@ static int l_display_refresh_full(lua_State *L) {
 
 /* display.drawText(fontId, x, y, text) */
 static int l_display_draw_text(lua_State *L) {
-    int font_id = (int)luaL_checkinteger(L, 1);
+    int font_id = (int)lua_tointeger(L, 1);
     int x = (int)lua_tonumber(L, 2);  /* accept float from Lua division */
     int y = (int)lua_tonumber(L, 3);
     const char *text = luaL_checkstring(L, 4);
@@ -102,7 +102,7 @@ static int l_display_height(lua_State *L) {
 
 /* display.getTextWidth(fontId, text) → int */
 static int l_display_get_text_width(lua_State *L) {
-    int font_id = (int)luaL_checkinteger(L, 1);
+    int font_id = (int)lua_tointeger(L, 1);
     const char *text = luaL_checkstring(L, 2);
 
     LOG_DBG("LDISP", "getTextWidth(fid=%d, '%s')", font_id, text);
@@ -120,7 +120,7 @@ static int l_display_get_text_width(lua_State *L) {
 
 /* display.getLineHeight(fontId) → int */
 static int l_display_get_line_height(lua_State *L) {
-    int font_id = (int)luaL_checkinteger(L, 1);
+    int font_id = (int)lua_tointeger(L, 1);
     const font_data_t *font = font_manager_get(font_id);
     if (!font) {
         return luaL_error(L, "invalid font id: %d", font_id);
@@ -153,7 +153,7 @@ static int l_display_fill_rounded_rect_gray(lua_State *L) {
 
 /* display.drawTextInverted(fontId, x, y, text) — white text (for selected items) */
 static int l_display_draw_text_inverted(lua_State *L) {
-    int font_id = (int)luaL_checkinteger(L, 1);
+    int font_id = (int)lua_tointeger(L, 1);
     int x = (int)lua_tonumber(L, 2);
     int y = (int)lua_tonumber(L, 3);
     const char *text = luaL_checkstring(L, 4);
@@ -170,7 +170,7 @@ static int l_display_draw_text_inverted(lua_State *L) {
 
 /* display.setOrientation(n) — 0=portrait, 1=landscape_cw, 2=inverted, 3=landscape_ccw */
 static int l_display_set_orientation(lua_State *L) {
-    int orient = (int)luaL_checkinteger(L, 1);
+    int orient = (int)lua_tonumber(L, 1);
     renderer_set_orientation((orientation_t)orient);
     return 0;
 }
@@ -179,6 +179,56 @@ static int l_display_set_orientation(lua_State *L) {
 static int l_display_get_orientation(lua_State *L) {
     lua_pushinteger(L, (int)renderer_get_orientation());
     return 1;
+}
+
+/* display.drawLinePhysical(x1, y1, x2, y2) — physical coords, no rotation */
+static int l_display_draw_line_physical(lua_State *L) {
+    int x1 = (int)lua_tonumber(L, 1);
+    int y1 = (int)lua_tonumber(L, 2);
+    int x2 = (int)lua_tonumber(L, 3);
+    int y2 = (int)lua_tonumber(L, 4);
+    renderer_draw_line_physical(x1, y1, x2, y2, true);
+    return 0;
+}
+
+/* display.drawRectPhysical(x, y, w, h) — physical coords, no rotation */
+static int l_display_draw_rect_physical(lua_State *L) {
+    int x = (int)lua_tonumber(L, 1);
+    int y = (int)lua_tonumber(L, 2);
+    int w = (int)lua_tonumber(L, 3);
+    int h = (int)lua_tonumber(L, 4);
+    renderer_draw_rect_physical(x, y, w, h, true);
+    return 0;
+}
+
+/* display.drawTextPhysical(fontId, x, y, text) — physical coords, no rotation */
+static int l_display_draw_text_physical(lua_State *L) {
+    int font_id = (int)lua_tointeger(L, 1);
+    int x = (int)lua_tonumber(L, 2);
+    int y = (int)lua_tonumber(L, 3);
+    const char *text = luaL_checkstring(L, 4);
+
+    const font_data_t *font = font_manager_get(font_id);
+    const char *path = font_manager_get_path(font_id);
+    if (!font || !path) return 0;
+
+    /* Temporarily set portrait orientation for physical rendering */
+    orientation_t saved = renderer_get_orientation();
+    renderer_set_orientation(ORIENT_PORTRAIT);
+    font_render_draw_text(font, path, x, y, text, true);
+    renderer_set_orientation(saved);
+    return 0;
+}
+
+/* display.contentArea() → x, y, w, h — usable content area excluding button bar */
+static int l_display_content_area(lua_State *L) {
+    int x, y, w, h;
+    renderer_get_content_area(&x, &y, &w, &h);
+    lua_pushinteger(L, x);
+    lua_pushinteger(L, y);
+    lua_pushinteger(L, w);
+    lua_pushinteger(L, h);
+    return 4;
 }
 
 void api_display_register(lua_State *L) {
@@ -197,8 +247,12 @@ void api_display_register(lua_State *L) {
         {"fillRoundedRect",      l_display_fill_rounded_rect},
         {"fillRoundedRectGray", l_display_fill_rounded_rect_gray},
         {"drawTextInverted",  l_display_draw_text_inverted},
-        {"setOrientation",    l_display_set_orientation},
-        {"getOrientation",    l_display_get_orientation},
+        {"setOrientation",       l_display_set_orientation},
+        {"getOrientation",       l_display_get_orientation},
+        {"drawLinePhysical",     l_display_draw_line_physical},
+        {"drawRectPhysical",     l_display_draw_rect_physical},
+        {"drawTextPhysical",     l_display_draw_text_physical},
+        {"contentArea",          l_display_content_area},
         {NULL, NULL}
     };
     luaL_newlib(L, funcs);

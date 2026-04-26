@@ -2,7 +2,7 @@
  * @file hal_power.h
  * @brief Power management API: battery level, sleep control.
  *
- * @status Complete
+ * @status Phase 6 — configurable sleep timeout + suppress
  * @issues None
  * @todo None
  */
@@ -30,6 +30,21 @@ uint16_t hal_power_battery_millivolts(void);
  * Call once per loop iteration.
  */
 void hal_power_check_sleep(void);
+
+/**
+ * Set the auto-sleep timeout.
+ *
+ * @param minutes Minutes of inactivity before sleep (1-30). 0 = disable.
+ */
+void hal_power_set_sleep_timeout(uint32_t minutes);
+
+/**
+ * Suppress or restore auto-sleep.
+ * Use when WiFi server is active, USB connected, or downloading.
+ *
+ * @param suppress true to prevent sleep, false to restore normal behavior
+ */
+void hal_power_suppress_sleep(bool suppress);
 
 /** Enter deep sleep immediately. Does not return. */
 void hal_power_enter_sleep(void);

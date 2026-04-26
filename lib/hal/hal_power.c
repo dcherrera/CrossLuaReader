@@ -29,8 +29,9 @@ static uint16_t cached_percent = 0;
 static uint32_t last_battery_read_ms = 0;
 
 /* Auto-sleep */
-#define AUTO_SLEEP_MS    600000  /* 10 minutes default */
+static uint32_t sleep_timeout_ms = 600000;  /* 10 minutes default, configurable */
 static uint32_t last_activity_ms = 0;
+static bool sleep_suppressed = false;
 
 bool hal_power_init(void) {
     LOG_INF("PWR", "Initializing power management");
@@ -68,15 +69,32 @@ uint16_t hal_power_battery_millivolts(void) {
     return 0;
 }
 
+void hal_power_set_sleep_timeout(uint32_t minutes) {
+    if (minutes == 0) {
+        sleep_timeout_ms = 0;  /* disable auto-sleep */
+        LOG_INF("PWR", "Auto-sleep disabled");
+    } else {
+        sleep_timeout_ms = minutes * 60 * 1000;
+        LOG_INF("PWR", "Sleep timeout: %u min", minutes);
+    }
+}
+
+void hal_power_suppress_sleep(bool suppress) {
+    sleep_suppressed = suppress;
+    LOG_INF("PWR", "Sleep %s", suppress ? "suppressed" : "restored");
+}
+
 void hal_power_check_sleep(void) {
+    if (sleep_suppressed || sleep_timeout_ms == 0) return;
+
     if (hal_gpio_was_any_pressed() || hal_gpio_was_any_released()) {
         last_activity_ms = (uint32_t)(esp_timer_get_time() / 1000);
         return;
     }
 
     uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
-    if (now - last_activity_ms > AUTO_SLEEP_MS) {
-        LOG_INF("PWR", "Auto-sleep after %d ms idle", AUTO_SLEEP_MS);
+    if (now - last_activity_ms > sleep_timeout_ms) {
+        LOG_INF("PWR", "Auto-sleep after %u ms idle", sleep_timeout_ms);
         hal_power_enter_sleep();
     }
 }

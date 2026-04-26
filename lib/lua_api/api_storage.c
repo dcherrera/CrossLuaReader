@@ -61,8 +61,8 @@ static int l_storage_read(lua_State *L) {
 /* storage.readBytes(path, offset, length) → string or nil, errmsg */
 static int l_storage_read_bytes(lua_State *L) {
     const char *path = luaL_checkstring(L, 1);
-    size_t offset = (size_t)luaL_checkinteger(L, 2);
-    size_t length = (size_t)luaL_checkinteger(L, 3);
+    size_t offset = (size_t)lua_tointeger(L, 2);
+    size_t length = (size_t)lua_tointeger(L, 3);
 
     if (length > 64 * 1024) {
         lua_pushnil(L);

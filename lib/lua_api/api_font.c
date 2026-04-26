@@ -28,7 +28,7 @@ static int l_font_load(lua_State *L) {
 
 /* font.unload(fontId) */
 static int l_font_unload(lua_State *L) {
-    int id = (int)luaL_checkinteger(L, 1);
+    int id = (int)lua_tointeger(L, 1);
     font_manager_unload(id);
     return 0;
 }

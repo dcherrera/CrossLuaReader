@@ -4,6 +4,7 @@
 local ui = require("lib.ui")
 local theme = require("lib.theme")
 local buttons = require("lib.buttons")
+local fonts = require("lib.fonts")
 
 plugin = {
     name = "File Browser",
@@ -12,7 +13,7 @@ plugin = {
     menuEntry = "Browse Files",
 }
 
-local font_id = nil
+-- font_id replaced by fonts.ui from lib/fonts
 local current_path = "/"
 local entries = {}
 local selected = 1
@@ -62,7 +63,7 @@ local function load_directory(path)
 end
 
 function plugin.onEnter(path)
-    font_id = font.load("/fonts/NotoSans-14-Regular.cfont")
+    fonts.init()
     current_path = path or "/"
     load_directory(current_path)
     needs_render = true
@@ -145,28 +146,25 @@ function render()
     local t = theme.get()
     display.clear()
 
-    if font_id then
-        ui.draw_header(font_id, current_path)
+    if fonts.ui then
+        ui.draw_header(fonts.ui, current_path)
 
         local list_y = t.header_height + t.vertical_spacing
         local max_visible = math.floor((display.height() - t.header_height - t.button_hints_height) / t.list_row_height)
 
         if #entries == 0 then
-            display.drawText(font_id, t.side_padding, list_y, "No files found")
+            display.drawText(fonts.ui, t.side_padding, list_y, "No files found")
         else
-            ui.draw_list(font_id, entries, selected, list_y, max_visible, scroll_offset)
+            ui.draw_list(fonts.ui, entries, selected, list_y, max_visible, scroll_offset)
         end
 
-        ui.draw_button_hints(font_id, buttons.browser)
+        ui.draw_button_hints(fonts.ui, buttons.get("browser"))
     end
 
     display.refresh()
 end
 
 function plugin.onExit()
-    if font_id then
-        font.unload(font_id)
-        font_id = nil
-    end
+    fonts.cleanup()
     entries = {}
 end

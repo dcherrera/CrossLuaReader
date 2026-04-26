@@ -5,15 +5,17 @@
 local ui = require("lib.ui")
 local theme = require("lib.theme")
 local buttons = require("lib.buttons")
+local settings = require("lib.settings")
+local fonts = require("lib.fonts")
 
 plugin = {
     name = "Home",
     id = "home",
     type = "activity",
-    menuEntry = nil,  -- home is not shown in its own menu
+    menuEntry = nil,
+    system = true,
 }
 
-local font_id = nil
 local selected = 1
 local needs_render = true
 
@@ -24,18 +26,20 @@ local menu_items = {
 }
 
 function plugin.onEnter()
-    font_id = font.load("/fonts/NotoSans-14-Regular.cfont")
-    if not font_id then
-        system.log("Home: failed to load font")
-    end
+    -- Load and apply persisted settings
+    settings.load()
+    display.setOrientation(settings.get("orientation", 0))
+    theme.set(settings.get("theme", "lyra"))
+    system.setSleepTimeout(settings.get("sleepTimeout", 10))
+
+    -- Load fonts from settings
+    fonts.init()
+
     selected = 1
     needs_render = true
 end
 
 function plugin.loop()
-    input.poll()
-
-    -- Navigation
     if input.wasPressed(input.DOWN) then
         if selected < #menu_items then
             selected = selected + 1
@@ -53,10 +57,8 @@ function plugin.loop()
         elseif action == "settings" then
             plugin.navigate("settings")
         elseif action == "continue" then
-            -- Load last opened book path from state file
             local last = storage.read("/crosslua_last_book.txt")
             if last and storage.exists(last) then
-                -- Find reader for this file extension
                 local ext = last:match("%.(%w+)$")
                 if ext then
                     plugin.navigate(ext .. "_reader", last)
@@ -67,7 +69,6 @@ function plugin.loop()
         end
     end
 
-    -- Render
     if needs_render then
         needs_render = false
         render()
@@ -78,28 +79,19 @@ function render()
     local t = theme.get()
     display.clear()
 
-    -- Header
-    if font_id then
-        ui.draw_header(font_id, "CrossLua Reader")
-    end
+    if fonts.ui then
+        ui.draw_header(fonts.ui, "CrossLua Reader")
 
-    -- Menu
-    local menu_y = t.header_height + t.vertical_spacing
-    if font_id then
-        ui.draw_menu(font_id, menu_items, selected, menu_y)
-    end
+        local cx, cy, cw, ch = display.contentArea()
+        local menu_y = cy + t.header_height + t.vertical_spacing
+        ui.draw_menu(fonts.ui, menu_items, selected, menu_y)
 
-    -- Button hints
-    if font_id then
-        ui.draw_button_hints(font_id, buttons.home)
+        ui.draw_button_hints(fonts.ui, buttons.get("home"))
     end
 
     display.refresh()
 end
 
 function plugin.onExit()
-    if font_id then
-        font.unload(font_id)
-        font_id = nil
-    end
+    fonts.cleanup()
 end
