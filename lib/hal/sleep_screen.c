@@ -126,6 +126,55 @@ static bool render_wallpaper(const char *name) {
 
 static void render_blank(void) {
     renderer_clear_screen(0xFF);
+
+    int fid = boot_font_get_id();
+    if (fid < 0) return;
+
+    const font_data_t *font = font_manager_get(fid);
+    if (!font) return;
+
+    /* Force portrait for consistent centering */
+    orientation_t saved = renderer_get_orientation();
+    renderer_set_orientation(ORIENT_PORTRAIT);
+
+    int w = renderer_screen_width();
+    int h = renderer_screen_height();
+    int lh = font_render_get_line_height(font);
+
+    /* 6 lines centered vertically */
+    int total_h = lh * 6 + 40;
+    int y = (h - total_h) / 2;
+
+    const char *title = "CrossLua Reader";
+    int tw = font_render_get_advance_fb(fid, title);
+    font_render_draw_text_fb(fid, (w - tw) / 2, y, title, true);
+    y += lh + 12;
+
+    const char *line2 = "Brought to you by TeamIDE";
+    int l2w = font_render_get_advance_fb(fid, line2);
+    font_render_draw_text_fb(fid, (w - l2w) / 2, y, line2, true);
+    y += lh + 6;
+
+    const char *line3 = "Consider supporting the effort";
+    int l3w = font_render_get_advance_fb(fid, line3);
+    font_render_draw_text_fb(fid, (w - l3w) / 2, y, line3, true);
+    y += lh + 6;
+
+    const char *line4 = "teamide.dev/support";
+    int l4w = font_render_get_advance_fb(fid, line4);
+    font_render_draw_text_fb(fid, (w - l4w) / 2, y, line4, true);
+    y += lh + 12;
+
+    const char *line5 = "Or support through contribution at";
+    int l5w = font_render_get_advance_fb(fid, line5);
+    font_render_draw_text_fb(fid, (w - l5w) / 2, y, line5, true);
+    y += lh + 6;
+
+    const char *line6 = "github.com/dcherrera/CrossLuaReader";
+    int l6w = font_render_get_advance_fb(fid, line6);
+    font_render_draw_text_fb(fid, (w - l6w) / 2, y, line6, true);
+
+    renderer_set_orientation(saved);
 }
 
 static void render_single(void) {
