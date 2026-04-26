@@ -75,6 +75,8 @@ CrossLua Reader is designed so contributing is as simple as writing a Lua script
 
 Plugins must be MIT-licensed, free of network calls to non-public APIs, and pass a basic code audit (no `os.execute` shenanigans, no busy loops that wreck the battery).
 
+**Using AI to contribute is welcome** — please mention AI use in your PR description. I've intentionally left my Claude Code setup (`.claude/`, `.skills/`, `CLAUDE.md`) in the repo so contributors using Claude Code (or any tool that reads `CLAUDE.md`) start with my conventions, style preferences, and project gotchas already loaded. That's especially aimed at folks who want to contribute but aren't deeply technical — open the repo in Claude Code, describe what you want to build, and the assistant should know enough to make something close to what I'd accept. Full AI policy and contribution details in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Translations
 
 CrossLua Reader can be translated into any language by dropping a single JSON file on the SD card. No code, no toolchain — if you can edit a text file, you can ship a language pack.
