@@ -197,44 +197,76 @@ static bool decompress_group(int slot_idx, const font_data_t *font,
  * @param is_2bit     true for 2-bit bitmaps, false for 1-bit
  * @return            Pointer to compact_buf with packed data
  */
-static const uint8_t *compact_glyph(const uint8_t *group_data,
-                                     const font_glyph_t *glyph, bool is_2bit) {
-    if (glyph->data_length == 0 || glyph->width == 0 || glyph->height == 0) {
-        return compact_buf;  /* empty glyph */
+/**
+ * Compute the byte-aligned offset of a glyph within decompressed group data.
+ * Sums the aligned sizes of all preceding glyphs in the group.
+ * Ported from CrossPoint's FontDecompressor::getAlignedOffset.
+ */
+static uint32_t get_aligned_offset(const font_data_t *font, uint16_t group_idx,
+                                    uint32_t glyph_index) {
+    const font_group_t *grp = &font->groups[group_idx];
+    uint32_t offset = 0;
+
+    for (uint32_t i = grp->first_glyph_index; i < glyph_index; i++) {
+        const font_glyph_t *g = &font->glyphs[i];
+        if (g->width > 0 && g->height > 0) {
+            offset += ((g->width + 3) / 4) * g->height;
+        }
     }
 
-    const uint8_t *src = group_data + glyph->data_offset;
+    return offset;
+}
 
-    if (!is_2bit) {
-        /* 1-bit: direct copy, already packed */
-        size_t copy = glyph->data_length;
-        if (copy > MAX_GLYPH_SIZE) copy = MAX_GLYPH_SIZE;
-        memcpy(compact_buf, src, copy);
+/**
+ * Compact a single glyph from byte-aligned to packed format.
+ * Ported from CrossPoint's FontDecompressor::compactSingleGlyph.
+ */
+static const uint8_t *compact_glyph(const uint8_t *aligned_src,
+                                     const font_glyph_t *glyph, bool is_2bit) {
+    if (glyph->data_length == 0 || glyph->width == 0 || glyph->height == 0) {
         return compact_buf;
     }
 
-    /* 2-bit: byte-aligned → packed conversion */
-    uint16_t aligned_stride = (glyph->width + 3) / 4;  /* bytes per row, byte-aligned */
-    uint16_t packed_stride = (glyph->width * 2 + 7) / 8;  /* bytes per row, packed */
+    uint32_t row_stride = (glyph->width + 3) / 4;
 
-    memset(compact_buf, 0, glyph->data_length < MAX_GLYPH_SIZE ? glyph->data_length : MAX_GLYPH_SIZE);
+    if (!is_2bit) {
+        size_t copy = row_stride * glyph->height;
+        if (copy > MAX_GLYPH_SIZE) copy = MAX_GLYPH_SIZE;
+        memcpy(compact_buf, aligned_src, copy);
+        return compact_buf;
+    }
 
-    uint32_t packed_pos = 0;
-    for (uint16_t y = 0; y < glyph->height; y++) {
-        for (uint16_t x = 0; x < glyph->width; x++) {
-            /* Read from byte-aligned format */
-            uint32_t aligned_idx = y * aligned_stride + x / 4;
-            uint8_t aligned_shift = (3 - (x % 4)) * 2;
-            uint8_t pixel = (src[aligned_idx] >> aligned_shift) & 0x03;
+    /* If width is a multiple of 4, byte-aligned == packed — just copy */
+    if (glyph->width % 4 == 0) {
+        size_t copy = row_stride * glyph->height;
+        if (copy > MAX_GLYPH_SIZE) copy = MAX_GLYPH_SIZE;
+        memcpy(compact_buf, aligned_src, copy);
+        return compact_buf;
+    }
 
-            /* Write to packed format */
-            uint32_t pack_byte = packed_pos / 4;
-            uint8_t pack_shift = (3 - (packed_pos % 4)) * 2;
-            if (pack_byte < MAX_GLYPH_SIZE) {
-                compact_buf[pack_byte] |= (pixel << pack_shift);
+    /* Compact: strip row padding */
+    uint8_t out_byte = 0;
+    uint8_t out_bits = 0;
+    uint32_t write_idx = 0;
+
+    for (uint8_t y = 0; y < glyph->height; y++) {
+        for (uint8_t x = 0; x < glyph->width; x++) {
+            uint8_t pixel = (aligned_src[y * row_stride + x / 4] >> ((3 - (x % 4)) * 2)) & 0x03;
+            out_byte = (out_byte << 2) | pixel;
+            out_bits += 2;
+            if (out_bits == 8) {
+                if (write_idx < MAX_GLYPH_SIZE) {
+                    compact_buf[write_idx++] = out_byte;
+                }
+                out_byte = 0;
+                out_bits = 0;
             }
-            packed_pos++;
         }
+    }
+
+    /* Flush remaining bits */
+    if (out_bits > 0 && write_idx < MAX_GLYPH_SIZE) {
+        compact_buf[write_idx++] = out_byte << (8 - out_bits);
     }
 
     return compact_buf;
@@ -267,16 +299,19 @@ const uint8_t *font_cache_get_bitmap(const font_data_t *font,
 
     /* Check cache */
     int slot = find_cached_slot(font, (uint16_t)group_idx);
-    if (slot >= 0) {
-        slots[slot].access_tick = ++tick;
-        return compact_glyph(slots[slot].data, glyph, font->is_2bit);
+    if (slot < 0) {
+        /* Cache miss — decompress into LRU slot */
+        slot = find_lru_slot();
+        if (!decompress_group(slot, font, (uint16_t)group_idx, font_path)) {
+            return NULL;
+        }
     }
 
-    /* Cache miss — decompress into LRU slot */
-    slot = find_lru_slot();
-    if (!decompress_group(slot, font, (uint16_t)group_idx, font_path)) {
-        return NULL;
-    }
+    slots[slot].access_tick = ++tick;
 
-    return compact_glyph(slots[slot].data, glyph, font->is_2bit);
+    /* Compute byte-aligned offset of this glyph within decompressed group */
+    uint32_t aligned_off = get_aligned_offset(font, (uint16_t)group_idx, glyph_index);
+    const uint8_t *glyph_src = slots[slot].data + aligned_off;
+
+    return compact_glyph(glyph_src, glyph, font->is_2bit);
 }
