@@ -24,7 +24,7 @@ Push framebuffer to e-ink display. `mode`: `0` = full, `1` = half, `2` = fast (d
 Full refresh (best quality, clears ghosting).
 
 ### display.drawText(fontId, x, y, text)
-Draw UTF-8 text. `fontId` from `font.load()`. `x`, `y` are logical coordinates (top-left of text line).
+Draw UTF-8 text. `fontId` from `font.load()`. `x`, `y` are logical coordinates (top-left of text line). If a fallback font is set via `font.setFallback()`, missing glyphs are automatically rendered from the fallback font.
 
 ### display.drawLine(x1, y1, x2, y2)
 Draw a black line between two points.
@@ -245,27 +245,34 @@ system.log("Battery: " .. system.batteryPercent() .. "%")
 
 ## font
 
-Load and unload .cfont font files from the SD card.
+Load, unload, and configure .cfont font files from the SD card.
 
 ### font.load(path) → fontId | nil, errmsg
 Load a `.cfont` file. Returns an integer font ID for use with `display.drawText()` and `display.getTextWidth()`. Max 4 fonts loaded simultaneously.
 
 ### font.unload(fontId)
-Free a loaded font and its memory.
+Free a loaded font and its memory. Also clears any fallback references pointing to this font.
+
+### font.setFallback(primaryId, fallbackId) → bool
+Set a fallback font for a slot. When a glyph is missing from the primary font, the renderer automatically tries the fallback font before rendering the replacement character. Used for non-Latin script support (e.g., NotoSans primary with NotoSansHebrew fallback).
+
+Returns `false` if either font is not loaded, if IDs are the same, or if it would create a circular chain.
+
+### font.clearFallback(fontId)
+Remove the fallback font from a slot.
 
 **Example:**
 ```lua
-local ui = font.load("/fonts/Ubuntu-12-Regular.cfont")
 local reader = font.load("/fonts/NotoSans-14-Regular.cfont")
+local hebrew = font.load("/languages/he/fonts/NotoSansHebrew-14-Regular.cfont")
+font.setFallback(reader, hebrew)
 
-display.clear()
-display.drawText(ui, 10, 10, "Menu Title")
-display.drawText(reader, 10, 40, "Book content goes here...")
-display.refresh()
+-- Now drawText with reader font automatically renders Hebrew from the fallback:
+display.drawText(reader, 20, 20, "Hello שלום")  -- seamless mixed script
 
--- When done:
+font.clearFallback(reader)
+font.unload(hebrew)
 font.unload(reader)
-font.unload(ui)
 ```
 
 ---

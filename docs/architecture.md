@@ -25,9 +25,10 @@ CrossLuaReader/
 │   ├── renderer/           # Framebuffer rendering (pure C)
 │   │   └── renderer.c/h        # Pixel, line, rect, polygon drawing
 │   ├── font/               # Font loading and text rendering (pure C)
+│   │   ├── font_manager.c/h    # Multi-font slot management + fallback chains
 │   │   ├── font_loader.c/h     # .cfont file parser
 │   │   ├── font_cache.c/h      # LRU decompression cache
-│   │   └── font_render.c/h     # Glyph rendering, drawText, text measurement
+│   │   └── font_render.c/h     # Glyph rendering, drawText, fallback-aware text
 │   ├── bidi/               # Bidirectional text support (pure C)
 │   │   ├── bidi_classify.c/h   # Codepoint direction classification
 │   │   └── bidi_reorder.c/h    # Visual reordering for RTL/mixed text
@@ -48,7 +49,13 @@ CrossLuaReader/
 ├── open-x4-sdk/            # Low-level hardware SDK (symlink)
 ├── sdcard/                 # Default SD card contents (shipped with firmware)
 │   ├── plugins/            # Core Lua plugins
-│   └── fonts/              # .cfont font files
+│   ├── fonts/              # .cfont font files (Latin, Cyrillic, Greek)
+│   └── languages/          # Language packs (drop-in folders)
+│       ├── en/lang.json        # English (default)
+│       └── he/                 # Hebrew pack
+│           ├── lang.json       # UI translations + font metadata
+│           └── fonts/          # Hebrew .cfont files
+├── lang_packs/             # Pre-built language packs (copy to SD)
 ├── tools/                  # Development tools
 │   └── cfont-convert/      # TTF → .cfont converter (Python)
 ├── scripts/                # Build and utility scripts
@@ -113,6 +120,7 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 | 4 - Plugin manager | 554KB (8.5%) | 75KB (22.9%) | Discovery, lifecycle, switching |
 | 5 - Core UI plugins | 555KB (8.5%) | 75KB (22.9%) | Home, browser, settings + renderer additions |
 | 6 - Settings & persistence | 562KB (8.6%) | 75KB (22.9%) | Settings, fonts, progress, sleep, physical button bar, content area |
+| 7 - Font fallback & language packs | 564KB (8.6%) | 75KB (22.9%) | Per-slot font fallback, language pack discovery, UI translation |
 
 ### Projected (full runtime with Lua + fonts)
 
@@ -133,7 +141,24 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 
 Fonts are stored as `.cfont` binary files on the SD card. The font loader reads them on demand, and the LRU cache keeps recently-used glyph groups decompressed in RAM.
 
-See `docs/cfont-format.md` for the binary format specification.
+### Font Fallback
+
+Each font slot can have a fallback font. When a glyph is missing from the primary font, the renderer tries the fallback before falling back to U+FFFD. This enables seamless mixed-script text (e.g., Latin + Hebrew in one `drawText` call).
+
+The fallback chain is: primary exact → fallback exact → primary U+FFFD → skip.
+
+Fallback is configured from Lua via `font.setFallback(primaryId, fallbackId)`. The `lib/fonts.lua` module auto-loads fallback fonts based on the selected language.
+
+### Language Packs
+
+Drop-in folders at `/languages/{code}/` on the SD card. Each contains:
+- `lang.json` — metadata (name, direction, font family) and UI string translations
+- `fonts/` — script-specific .cfont files (e.g., NotoSansHebrew)
+
+The settings plugin auto-discovers language packs. The `lib/lang.lua` module provides `lang.tr(key)` for translated UI strings with English fallback.
+
+See `docs/language-packs.md` for the full specification.
+See `docs/cfont-format.md` for the binary font format specification.
 
 ## Plugin API
 

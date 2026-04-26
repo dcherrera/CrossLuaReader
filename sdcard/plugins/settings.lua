@@ -6,6 +6,7 @@ local theme = require("lib.theme")
 local buttons = require("lib.buttons")
 local settings = require("lib.settings")
 local fonts = require("lib.fonts")
+local lang = require("lib.lang")
 
 plugin = {
     name = "Settings",
@@ -19,8 +20,9 @@ local selected = 1
 local needs_render = true
 local needs_full_refresh = false
 
--- Settings menu items with actual values (not display names)
+-- Static settings menu items
 local menu_items = {
+    { key = "language",         label = "", values = {}, display = {} },  -- populated dynamically
     { key = "theme",            label = "", values = {"lyra", "classic"},                      display = {"Lyra", "Classic"} },
     { key = "fontFamily",       label = "", values = {"NotoSans", "Bookerly", "OpenDyslexic"}, display = {"Noto Sans", "Bookerly", "OpenDyslexic"} },
     { key = "fontSize",         label = "", values = {"12", "14", "16", "18"},                 display = {"Small", "Medium", "Large", "X-Large"} },
@@ -60,11 +62,30 @@ local function apply_setting(item, value)
         fonts.reload_reader()
     elseif item.key == "sleepTimeout" then
         system.setSleepTimeout(value)
+    elseif item.key == "language" then
+        lang.load(value)
+        fonts.reload_reader()
     end
 end
 
 function plugin.onEnter()
     settings.load()
+
+    -- Discover language packs and populate menu item
+    local packs = lang.discover()
+    local lang_item = menu_items[1]  -- language is first item
+    lang_item.values = {}
+    lang_item.display = {}
+    for _, p in ipairs(packs) do
+        lang_item.values[#lang_item.values + 1] = p.code
+        lang_item.display[#lang_item.display + 1] = p.name
+    end
+    -- Ensure at least English if no packs found
+    if #lang_item.values == 0 then
+        lang_item.values = {"en"}
+        lang_item.display = {"English"}
+    end
+
     fonts.init()
     update_labels()
     selected = 1

@@ -9,6 +9,7 @@
  */
 
 #include "font_render.h"
+#include "font_manager.h"
 #include "font_cache.h"
 #include "utf8.h"
 #include "bidi.h"
@@ -20,17 +21,12 @@
 /* ── Glyph lookup (binary search on intervals) ──────────────────────── */
 
 /**
- * Look up a glyph by codepoint. Binary search through unicode intervals.
- * Ported from EpdFont::getGlyph.
+ * Exact glyph lookup — binary search only, no U+FFFD fallback.
  *
- * @param font Font data
- * @param cp   Unicode codepoint
- * @param out_index Set to the glyph's index in font->glyphs (for cache)
- * @return     Pointer to glyph, or NULL if not found
+ * @return Glyph pointer, or NULL if codepoint not in this font
  */
-static const font_glyph_t *get_glyph(const font_data_t *font, uint32_t cp,
-                                       uint32_t *out_index) {
-    /* Binary search: find first interval where first > cp, then check previous */
+static const font_glyph_t *get_glyph_exact(const font_data_t *font, uint32_t cp,
+                                             uint32_t *out_index) {
     int lo = 0, hi = (int)font->interval_count;
     while (lo < hi) {
         int mid = (lo + hi) / 2;
@@ -41,11 +37,7 @@ static const font_glyph_t *get_glyph(const font_data_t *font, uint32_t cp,
         }
     }
 
-    if (lo == 0) {
-        /* Try replacement glyph */
-        if (cp != REPLACEMENT_GLYPH) return get_glyph(font, REPLACEMENT_GLYPH, out_index);
-        return NULL;
-    }
+    if (lo == 0) return NULL;
 
     const font_interval_t *iv = &font->intervals[lo - 1];
     if (cp >= iv->first && cp <= iv->last) {
@@ -55,8 +47,64 @@ static const font_glyph_t *get_glyph(const font_data_t *font, uint32_t cp,
             return &font->glyphs[idx];
         }
     }
+    return NULL;
+}
 
-    if (cp != REPLACEMENT_GLYPH) return get_glyph(font, REPLACEMENT_GLYPH, out_index);
+/**
+ * Glyph lookup with U+FFFD fallback (no font fallback).
+ * Used by combining mark lookup and non-fallback draw paths.
+ */
+static const font_glyph_t *get_glyph(const font_data_t *font, uint32_t cp,
+                                       uint32_t *out_index) {
+    const font_glyph_t *g = get_glyph_exact(font, cp, out_index);
+    if (g) return g;
+    if (cp != REPLACEMENT_GLYPH) return get_glyph_exact(font, REPLACEMENT_GLYPH, out_index);
+    return NULL;
+}
+
+/**
+ * Glyph lookup with font fallback chain.
+ * Tries: primary exact → fallback exact → primary U+FFFD → NULL.
+ * Sets out_font/out_path to whichever font provided the glyph.
+ */
+static const font_glyph_t *get_glyph_with_fallback(
+    int primary_id,
+    const font_data_t *primary_font, const char *primary_path,
+    uint32_t cp, uint32_t *out_index,
+    const font_data_t **out_font, const char **out_path) {
+
+    /* Try primary font */
+    const font_glyph_t *g = get_glyph_exact(primary_font, cp, out_index);
+    if (g) {
+        *out_font = primary_font;
+        *out_path = primary_path;
+        return g;
+    }
+
+    /* Try fallback font */
+    if (primary_id >= 0) {
+        const char *fb_path = NULL;
+        const font_data_t *fb = font_manager_get_fallback(primary_id, &fb_path);
+        if (fb) {
+            g = get_glyph_exact(fb, cp, out_index);
+            if (g) {
+                *out_font = fb;
+                *out_path = fb_path;
+                return g;
+            }
+        }
+    }
+
+    /* Last resort: U+FFFD from primary */
+    if (cp != REPLACEMENT_GLYPH) {
+        g = get_glyph_exact(primary_font, REPLACEMENT_GLYPH, out_index);
+        if (g) {
+            *out_font = primary_font;
+            *out_path = primary_path;
+            return g;
+        }
+    }
+
     return NULL;
 }
 
@@ -326,4 +374,114 @@ int font_render_get_line_height(const font_data_t *font) {
 
 int font_render_get_ascender(const font_data_t *font) {
     return font ? font->ascender : 0;
+}
+
+/* ── Fallback-aware variants ───────────────────────────────────────── */
+
+void font_render_draw_text_fb(int font_id, int x, int y,
+                              const char *text, bool black) {
+    const font_data_t *font = font_manager_get(font_id);
+    const char *font_path = font_manager_get_path(font_id);
+    if (!font || !text || !*text || !font_path) return;
+
+    /* BiDi reordering */
+    char visual_buf[512];
+    const char *render_text = text;
+    if (bidi_has_rtl(text)) {
+        bidi_reorder_line(text, visual_buf, sizeof(visual_buf));
+        render_text = visual_buf;
+    }
+
+    int cursor_y = y + font->ascender;
+    int cursor_x = x;
+    int32_t prev_advance_fp = 0;
+    uint32_t prev_cp = 0;
+    int last_base_left = 0;
+    int last_base_width = 0;
+    int last_base_top = 0;
+
+    const font_data_t *active_font = font;
+    const char *active_path = font_path;
+
+    const uint8_t *p = (const uint8_t *)render_text;
+    uint32_t cp;
+
+    while ((cp = utf8_next_codepoint(&p))) {
+        /* Combining marks: use fallback-aware lookup too */
+        if (utf8_is_combining_mark(cp)) {
+            uint32_t mark_idx;
+            const font_data_t *mark_font;
+            const char *mark_path;
+            const font_glyph_t *mark = get_glyph_with_fallback(
+                font_id, font, font_path, cp, &mark_idx,
+                &mark_font, &mark_path);
+            if (!mark) continue;
+            int raise = combining_mark_raise_above(mark->top, mark->height, last_base_top);
+            int mark_x = combining_mark_center_over(cursor_x, last_base_left,
+                                                     last_base_width, mark->left, mark->width);
+            render_glyph(mark_font, mark_path, mark, mark_idx, mark_x, cursor_y - raise, black);
+            continue;
+        }
+
+        /* Ligature chaining (primary font only) */
+        cp = apply_ligatures(font, cp, &p);
+
+        /* Differential rounding */
+        if (prev_cp != 0) {
+            int8_t kern = get_kerning(active_font, prev_cp, cp);
+            cursor_x += fp4_to_pixel(prev_advance_fp + kern);
+        }
+
+        uint32_t glyph_idx;
+        const font_glyph_t *glyph = get_glyph_with_fallback(
+            font_id, font, font_path, cp, &glyph_idx,
+            &active_font, &active_path);
+        if (!glyph) {
+            prev_cp = cp;
+            prev_advance_fp = 0;
+            continue;
+        }
+
+        last_base_left = glyph->left;
+        last_base_width = glyph->width;
+        last_base_top = glyph->top;
+        prev_advance_fp = glyph->advance_x;
+        prev_cp = cp;
+
+        render_glyph(active_font, active_path, glyph, glyph_idx, cursor_x, cursor_y, black);
+    }
+}
+
+int font_render_get_advance_fb(int font_id, const char *text) {
+    const font_data_t *font = font_manager_get(font_id);
+    const char *font_path = font_manager_get_path(font_id);
+    if (!font || !text || !*text) return 0;
+
+    const uint8_t *p = (const uint8_t *)text;
+    uint32_t cp, prev_cp = 0;
+    int width_px = 0;
+    int32_t prev_advance_fp = 0;
+    const font_data_t *active_font = font;
+    const char *active_path = font_path;
+
+    while ((cp = utf8_next_codepoint(&p))) {
+        if (utf8_is_combining_mark(cp)) continue;
+
+        cp = apply_ligatures(font, cp, &p);
+
+        if (prev_cp != 0) {
+            int8_t kern = get_kerning(active_font, prev_cp, cp);
+            width_px += fp4_to_pixel(prev_advance_fp + kern);
+        }
+
+        uint32_t idx;
+        const font_glyph_t *glyph = get_glyph_with_fallback(
+            font_id, font, font_path, cp, &idx,
+            &active_font, &active_path);
+        prev_advance_fp = glyph ? glyph->advance_x : 0;
+        prev_cp = cp;
+    }
+
+    width_px += fp4_to_pixel(prev_advance_fp);
+    return width_px;
 }

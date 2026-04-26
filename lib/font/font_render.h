@@ -53,3 +53,25 @@ int font_render_get_line_height(const font_data_t *font);
 
 /** @return Ascender height above baseline. */
 int font_render_get_ascender(const font_data_t *font);
+
+/**
+ * Draw text with font fallback support. When a glyph is missing from
+ * the primary font, automatically tries the fallback font (if set via
+ * font_manager_set_fallback).
+ *
+ * @param font_id  Font slot ID (0-3)
+ * @param x, y     Position (logical coordinates)
+ * @param text     UTF-8 encoded string
+ * @param black    true = black, false = white
+ */
+void font_render_draw_text_fb(int font_id, int x, int y,
+                              const char *text, bool black);
+
+/**
+ * Measure text advance width with font fallback support.
+ *
+ * @param font_id  Font slot ID (0-3)
+ * @param text     UTF-8 encoded string
+ * @return         Advance width in pixels
+ */
+int font_render_get_advance_fb(int font_id, const char *text);

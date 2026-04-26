@@ -56,41 +56,27 @@
 - [x] **Document**: Written `docs/settings-schema.md`, updated `docs/lua-api.md`, updated `docs/architecture.md`
 - [x] **Update plan**: Completed
 
-## Phase 7: Font Fallback & Language Packs
+## Phase 7: Font Fallback & Language Packs ✅
 
-- \[ \] C-side: add fallback font support to `font_render.c`
-
-  - `font_render_set_fallback(primary, fallback, fallback_path)` — glyph lookup tries primary → fallback
-
-  - `font.setFallback(primaryId, fallbackId)` Lua binding
-
-- \[ \] Create `plugins/lib/fonts.lua` `detect_fallbacks(text_sample)` function
-
-  - Scan text for non-Latin codepoints (Hebrew, Arabic, CJK ranges)
-
-  - Auto-load language-specific font as fallback from language pack
-
-- \[ \] Language pack system — drop-in `/languages/{code}/` folders
-
-  - `lang.json`: metadata, direction, font family, unicode ranges, UI string translations
-
-  - `fonts/`: language-specific .cfont files
-
-  - Auto-discovered by settings plugin
-
-- \[ \] Ship default language packs: English + Hebrew
-
-- \[ \] Settings: language selection from discovered packs
-
-- \[ \] `settings.tr(key)` — translated UI string, falls back to English
-
-- \[ \] Generate Hebrew language pack fonts (NotoSansHebrew .cfont files with Hebrew ranges)
-
-- \[ \] Test: open Hebrew EPUB with NotoSans selected → auto-falls back to Hebrew font
-
-- \[ \] **Document**: Write `docs/language-packs.md`. Update `docs/lua-api.md`. Update `docs/architecture.md`.
-
-- \[ \] **Update plan**: Check off completed tasks.
+- [x] C-side: per-slot font fallback in `font_manager.c` — `set_fallback`, `clear_fallback`, `get_fallback`
+- [x] C-side: fallback-aware glyph lookup in `font_render.c` — `get_glyph_with_fallback()`, `font_render_draw_text_fb()`, `font_render_get_advance_fb()`
+- [x] C-side: `font.setFallback(primaryId, fallbackId)` and `font.clearFallback(fontId)` Lua bindings
+- [x] C-side: `display.drawText`, `drawTextInverted`, `drawTextPhysical`, `getTextWidth` all use fallback-aware rendering
+- [x] Created `plugins/lib/json.lua` — recursive-descent JSON parser (replaces flat regex parser in settings.lua)
+- [x] Created `plugins/lib/lang.lua` — language pack discovery, loading, `tr()` translation with English fallback
+- [x] Updated `plugins/lib/fonts.lua` — fallback font slot, `detect_scripts()`, `load_fallback_for_script()`, auto-load on init
+- [x] Updated `plugins/lib/settings.lua` — uses lib/json for parsing
+- [x] Language pack system — drop-in `/languages/{code}/` folders with `lang.json` + optional `fonts/`
+- [x] Ship default language packs: English + Hebrew (in `lang_packs/` directory)
+- [x] Settings: dynamic language selection from discovered packs
+- [x] `lang.tr(key)` — translated UI string, falls back to English, then raw key
+- [x] Generated Hebrew language pack fonts (NotoSansHebrew .cfont sizes 12, 14, 16, 18)
+- [x] Updated `plugins/home.lua` — loads language pack, uses `lang.tr()` for menu labels
+- [x] Updated `plugins/settings.lua` — language menu item, applies language + reloads fonts on change
+- [ ] Test: open Hebrew EPUB with NotoSans selected → auto-falls back to Hebrew font
+- [x] Build passes: Flash 8.6% (564KB), RAM 22.9% (75KB)
+- [x] **Document**: Written `docs/language-packs.md`, updated `docs/lua-api.md`, `docs/plugin-guide.md`, `docs/architecture.md`
+- [x] **Update plan**: Completed
 
 ## Phase 8: Sleep Screen & Error Recovery
 

@@ -2,6 +2,8 @@
 -- Reads/writes /settings.json on SD card. All plugins use this
 -- instead of handling JSON directly.
 
+local json = require("lib.json")
+
 local M = {}
 
 local SETTINGS_FILE = "/settings.json"
@@ -23,25 +25,11 @@ local defaults = {
     language = "en",
 }
 
--- ── Simple JSON parser for flat objects ─────────────────────────────
+-- ── JSON parsing via shared lib/json module ────────────────────────
 
 local function parse_json(str)
-    local result = {}
-    if not str then return result end
-
-    -- Match "key": "value" or "key": number
-    for key, val in str:gmatch('"([^"]+)"%s*:%s*"?([^",}]+)"?') do
-        -- Try to convert to number
-        local num = tonumber(val)
-        if num then
-            result[key] = num
-        else
-            -- Strip trailing whitespace
-            result[key] = val:match("^%s*(.-)%s*$")
-        end
-    end
-
-    return result
+    if not str then return {} end
+    return json.decode(str) or {}
 end
 
 local function to_json(tbl)

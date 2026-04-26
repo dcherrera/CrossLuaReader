@@ -166,15 +166,19 @@ settings.save()                              -- persist to SD
 See `docs/settings-schema.md` for all available keys, types, and defaults.
 
 ### lib.fonts
-System font manager. Loads UI and reader fonts based on settings.
+System font manager. Loads UI font, reader font, and optional fallback font based on settings and language.
 
 ```lua
 local fonts = require("lib.fonts")
-fonts.init()                                 -- load fonts from settings (call in onEnter)
+fonts.init()                                 -- load fonts + auto-load fallback (call in onEnter)
 display.drawText(fonts.ui, x, y, "Menu")     -- Ubuntu 12 UI font
-display.drawText(fonts.reader, x, y, "Book") -- user's chosen reader font
-fonts.reload_reader()                        -- reload after font settings change
-fonts.cleanup()                              -- unload (call in onExit)
+display.drawText(fonts.reader, x, y, "Book") -- user's reader font (with fallback if set)
+fonts.reload_reader()                        -- reload after font/language settings change
+fonts.cleanup()                              -- unload all (call in onExit)
+
+-- Script detection for reader plugins:
+local scripts = fonts.detect_scripts(text)   -- returns e.g. {"hebrew"}
+fonts.detect_fallbacks(text)                 -- auto-load fallback from text content
 ```
 
 ### lib.progress
@@ -231,6 +235,27 @@ input.setMapping(buttons.get_mapping(orientation))
 ```
 
 Format in buttons.lua is `logical_action = "physical_button"` — read as "to perform [action], press [button]". Edit `/plugins/lib/buttons.lua` to customize mappings or labels.
+
+### lib.lang
+Language pack discovery and UI translation. Falls back to English for missing keys.
+
+```lua
+local lang = require("lib.lang")
+lang.load("he")                              -- load Hebrew language pack
+local label = lang.tr("settings")            -- → "הגדרות" (or "Settings" if key missing)
+local dir = lang.get_direction()             -- → "rtl"
+local family = lang.get_font_family()        -- → "NotoSansHebrew"
+local packs = lang.discover()                -- scan /languages/ for available packs
+```
+
+### lib.json
+Shared recursive JSON parser. Handles objects, arrays, strings, numbers, booleans, null.
+
+```lua
+local json = require("lib.json")
+local data = json.decode('{"name": "test", "count": 42}')
+-- data.name == "test", data.count == 42
+```
 
 ### lib.status_bar
 Reader status bar for book progress.

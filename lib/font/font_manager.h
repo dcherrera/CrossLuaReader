@@ -46,3 +46,29 @@ const char *font_manager_get_path(int font_id);
 
 /** Unload all fonts and free all memory. */
 void font_manager_unload_all(void);
+
+/**
+ * Set a fallback font for a slot. When glyph lookup fails on the primary
+ * font, the renderer will try the fallback font before giving up.
+ *
+ * @param font_id     Primary font slot ID
+ * @param fallback_id Fallback font slot ID (must be loaded, != font_id)
+ * @return            true on success
+ */
+bool font_manager_set_fallback(int font_id, int fallback_id);
+
+/**
+ * Clear the fallback for a font slot.
+ *
+ * @param font_id Font slot ID
+ */
+void font_manager_clear_fallback(int font_id);
+
+/**
+ * Get the fallback font data and path for a slot.
+ *
+ * @param font_id  Primary font slot ID
+ * @param out_path Output: fallback font's SD path (can be NULL if not needed)
+ * @return         Fallback font data, or NULL if no fallback set
+ */
+const font_data_t *font_manager_get_fallback(int font_id, const char **out_path);

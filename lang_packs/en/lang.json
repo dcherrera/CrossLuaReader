@@ -1,0 +1,30 @@
+{
+  "code": "en",
+  "name": "English",
+  "direction": "ltr",
+  "fontFamily": null,
+  "strings": {
+    "home": "Home",
+    "settings": "Settings",
+    "browse_files": "Browse Files",
+    "continue_reading": "Continue Reading",
+    "back": "Back",
+    "select": "Select",
+    "open": "Open",
+    "change": "Change",
+    "cancel": "Cancel",
+    "ok": "OK",
+    "prev": "Prev",
+    "next": "Next",
+    "no_files": "No files found",
+    "no_book": "No book to continue",
+    "language": "Language",
+    "font_family": "Font Family",
+    "font_size": "Font Size",
+    "orientation": "Orientation",
+    "screen_margin": "Screen Margin",
+    "refresh_freq": "Refresh Frequency",
+    "sleep_timeout": "Sleep Timeout",
+    "theme": "Theme"
+  }
+}

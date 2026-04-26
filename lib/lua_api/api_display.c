@@ -42,23 +42,18 @@ static int l_display_refresh_full(lua_State *L) {
     return 0;
 }
 
-/* display.drawText(fontId, x, y, text) */
+/* display.drawText(fontId, x, y, text) — fallback-aware */
 static int l_display_draw_text(lua_State *L) {
     int font_id = (int)lua_tointeger(L, 1);
-    int x = (int)lua_tonumber(L, 2);  /* accept float from Lua division */
+    int x = (int)lua_tonumber(L, 2);
     int y = (int)lua_tonumber(L, 3);
     const char *text = luaL_checkstring(L, 4);
 
-    LOG_DBG("LDISP", "drawText(fid=%d, x=%d, y=%d, '%s')", font_id, x, y, text);
-
-    const font_data_t *font = font_manager_get(font_id);
-    const char *path = font_manager_get_path(font_id);
-    if (!font || !path) {
+    if (!font_manager_get(font_id)) {
         return luaL_error(L, "invalid font id: %d", font_id);
     }
 
-    font_render_draw_text(font, path, x, y, text, true);
-    LOG_DBG("LDISP", "drawText done");
+    font_render_draw_text_fb(font_id, x, y, text, true);
     return 0;
 }
 
@@ -104,21 +99,16 @@ static int l_display_height(lua_State *L) {
     return 1;
 }
 
-/* display.getTextWidth(fontId, text) → int */
+/* display.getTextWidth(fontId, text) → int — fallback-aware */
 static int l_display_get_text_width(lua_State *L) {
     int font_id = (int)lua_tointeger(L, 1);
     const char *text = luaL_checkstring(L, 2);
 
-    LOG_DBG("LDISP", "getTextWidth(fid=%d, '%s')", font_id, text);
-
-    const font_data_t *font = font_manager_get(font_id);
-    if (!font) {
+    if (!font_manager_get(font_id)) {
         return luaL_error(L, "invalid font id: %d", font_id);
     }
 
-    int w = font_render_get_text_advance(font, text);
-    LOG_DBG("LDISP", "getTextWidth = %d", w);
-    lua_pushinteger(L, w);
+    lua_pushinteger(L, font_render_get_advance_fb(font_id, text));
     return 1;
 }
 
@@ -155,20 +145,18 @@ static int l_display_fill_rounded_rect_gray(lua_State *L) {
     return 0;
 }
 
-/* display.drawTextInverted(fontId, x, y, text) — white text (for selected items) */
+/* display.drawTextInverted(fontId, x, y, text) — white text, fallback-aware */
 static int l_display_draw_text_inverted(lua_State *L) {
     int font_id = (int)lua_tointeger(L, 1);
     int x = (int)lua_tonumber(L, 2);
     int y = (int)lua_tonumber(L, 3);
     const char *text = luaL_checkstring(L, 4);
 
-    const font_data_t *font = font_manager_get(font_id);
-    const char *path = font_manager_get_path(font_id);
-    if (!font || !path) {
+    if (!font_manager_get(font_id)) {
         return luaL_error(L, "invalid font id: %d", font_id);
     }
 
-    font_render_draw_text(font, path, x, y, text, false);
+    font_render_draw_text_fb(font_id, x, y, text, false);
     return 0;
 }
 
@@ -205,21 +193,19 @@ static int l_display_draw_rect_physical(lua_State *L) {
     return 0;
 }
 
-/* display.drawTextPhysical(fontId, x, y, text) — physical coords, no rotation */
+/* display.drawTextPhysical(fontId, x, y, text) — physical coords, fallback-aware */
 static int l_display_draw_text_physical(lua_State *L) {
     int font_id = (int)lua_tointeger(L, 1);
     int x = (int)lua_tonumber(L, 2);
     int y = (int)lua_tonumber(L, 3);
     const char *text = luaL_checkstring(L, 4);
 
-    const font_data_t *font = font_manager_get(font_id);
-    const char *path = font_manager_get_path(font_id);
-    if (!font || !path) return 0;
+    if (!font_manager_get(font_id)) return 0;
 
     /* Temporarily set portrait orientation for physical rendering */
     orientation_t saved = renderer_get_orientation();
     renderer_set_orientation(ORIENT_PORTRAIT);
-    font_render_draw_text(font, path, x, y, text, true);
+    font_render_draw_text_fb(font_id, x, y, text, true);
     renderer_set_orientation(saved);
     return 0;
 }

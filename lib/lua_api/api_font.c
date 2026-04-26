@@ -33,10 +33,27 @@ static int l_font_unload(lua_State *L) {
     return 0;
 }
 
+/* font.setFallback(primaryId, fallbackId) → bool */
+static int l_font_set_fallback(lua_State *L) {
+    int primary = (int)lua_tointeger(L, 1);
+    int fallback = (int)lua_tointeger(L, 2);
+    lua_pushboolean(L, font_manager_set_fallback(primary, fallback));
+    return 1;
+}
+
+/* font.clearFallback(fontId) */
+static int l_font_clear_fallback(lua_State *L) {
+    int id = (int)lua_tointeger(L, 1);
+    font_manager_clear_fallback(id);
+    return 0;
+}
+
 void api_font_register(lua_State *L) {
     static const luaL_Reg funcs[] = {
-        {"load",   l_font_load},
-        {"unload", l_font_unload},
+        {"load",          l_font_load},
+        {"unload",        l_font_unload},
+        {"setFallback",   l_font_set_fallback},
+        {"clearFallback", l_font_clear_fallback},
         {NULL, NULL}
     };
     luaL_newlib(L, funcs);

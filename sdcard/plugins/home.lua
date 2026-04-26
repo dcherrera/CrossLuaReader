@@ -7,6 +7,7 @@ local theme = require("lib.theme")
 local buttons = require("lib.buttons")
 local settings = require("lib.settings")
 local fonts = require("lib.fonts")
+local lang = require("lib.lang")
 
 plugin = {
     name = "Home",
@@ -18,12 +19,7 @@ plugin = {
 
 local selected = 1
 local needs_render = true
-
-local menu_items = {
-    { label = "Continue Reading", action = "continue" },
-    { label = "Browse Files",     action = "browser" },
-    { label = "Settings",         action = "settings" },
-}
+local menu_items = {}
 
 function plugin.onEnter()
     -- Load and apply persisted settings
@@ -36,8 +32,18 @@ function plugin.onEnter()
     -- Apply button mapping for this orientation
     input.setMapping(buttons.get_mapping(orient))
 
-    -- Load fonts from settings
+    -- Load language pack
+    lang.load(settings.get("language", "en"))
+
+    -- Load fonts (includes fallback based on language)
     fonts.init()
+
+    -- Build menu with translated labels
+    menu_items = {
+        { label = lang.tr("continue_reading"), action = "continue" },
+        { label = lang.tr("browse_files"),     action = "browser" },
+        { label = lang.tr("settings"),         action = "settings" },
+    }
 
     selected = 1
     needs_render = true
