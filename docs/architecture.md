@@ -51,14 +51,16 @@ CrossLuaReader/
 │   └── json/               # JSON parser (pure C, cJSON or custom)
 ├── open-x4-sdk/            # Low-level hardware SDK (symlink)
 ├── sdcard/                 # Default SD card contents (shipped with firmware)
-│   ├── plugins/            # Core Lua plugins
+│   ├── plugins/            # Lua plugins (single .lua files or folders with main.lua)
 │   ├── fonts/              # .cfont font files (Latin, Cyrillic, Greek)
 │   └── languages/          # Language packs (drop-in folders)
 │       ├── en/lang.json        # English (default)
 │       └── he/                 # Hebrew pack
 │           ├── lang.json       # UI translations + font metadata
 │           └── fonts/          # Hebrew .cfont files
-├── lang_packs/             # Pre-built language packs (copy to SD)
+├── font_packs/             # Pre-built font packs (copy to SD /fonts/)
+├── lang_packs/             # Pre-built language packs (copy to SD /languages/)
+├── templates/              # Plugin templates (copy to SD /plugins/)
 ├── tools/                  # Development tools
 │   └── cfont-convert/      # TTF → .cfont converter (Python)
 ├── scripts/                # Build and utility scripts
@@ -162,6 +164,7 @@ Drop-in folders at `/languages/{code}/` on the SD card. Each contains:
 The settings plugin auto-discovers language packs. The `lib/lang.lua` module provides `lang.tr(key)` for translated UI strings with English fallback.
 
 See `docs/language-packs.md` for the full specification.
+See `docs/font-packs.md` for how to create and install font packs.
 See `docs/cfont-format.md` for the binary font format specification.
 
 ## Sleep Screen
@@ -178,6 +181,8 @@ Sleep screen modes (set via `system.setSleepMode()` from Lua):
 The BMP decoder (`lib/renderer/bmp_decoder.c`) streams images from SD row-by-row with Bayer 4x4 ordered dithering for 24-bit→1-bit conversion. No full-image allocation.
 
 Plugins can register a Lua callback via `system.setSleepHook(func)` to draw custom content (text, boxes, images) on top of the sleep screen. The hook runs after the base screen renders but before the display refresh. This enables features like quote overlays. The hook is auto-cleared on plugin exit and errors are caught safely.
+
+See `docs/sleep-screen.md` for the full specification.
 
 ## Error Recovery
 

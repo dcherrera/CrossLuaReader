@@ -74,7 +74,7 @@ void setup() {
 
     /* Step 8.5: Boot font — loaded before Lua for crash/sleep screens */
     {
-        int bf = font_manager_load("/fonts/NotoSans-12-Regular.cfont");
+        int bf = font_manager_load("/fonts/NotoSans/NotoSans-12-Regular.cfont");
         if (bf >= 0) {
             boot_font_set_id(bf);
             LOG_INF("MAIN", "Boot font loaded: slot %d", bf);

@@ -340,10 +340,19 @@ bool plugin_manager_init(void) {
     char path_buf[PLUGIN_PATH_MAX];
 
     while (hal_storage_dir_next(dir, name_buf, sizeof(name_buf), &is_dir)) {
-        if (is_dir || !ends_with_lua(name_buf)) continue;
         if (plugin_count >= PLUGIN_MAX_DISCOVERED) break;
 
-        snprintf(path_buf, sizeof(path_buf), "/plugins/%s", name_buf);
+        if (is_dir) {
+            /* Skip lib/ and hidden directories */
+            if (name_buf[0] == '.' || strcmp(name_buf, "lib") == 0) continue;
+
+            /* Community plugin: /plugins/{name}/main.lua */
+            snprintf(path_buf, sizeof(path_buf), "/plugins/%s/main.lua", name_buf);
+            if (!hal_storage_exists(path_buf)) continue;
+        } else {
+            if (!ends_with_lua(name_buf)) continue;
+            snprintf(path_buf, sizeof(path_buf), "/plugins/%s", name_buf);
+        }
 
         if (parse_plugin_manifest(path_buf, &plugins[plugin_count])) {
             LOG_INF("PLUG", "Discovered: %s (%s) [%s]",

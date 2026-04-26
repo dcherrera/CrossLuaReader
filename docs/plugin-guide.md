@@ -2,7 +2,10 @@
 
 ## Quick Start
 
-Create a file on the SD card at `/plugins/hello.lua`:
+Plugins come in two formats:
+
+### Single-file plugin
+Create `/plugins/hello.lua` on the SD card:
 
 ```lua
 plugin = {
@@ -13,26 +16,50 @@ plugin = {
 }
 
 function plugin.onEnter()
+  local fonts = require("lib.fonts")
+  fonts.init()
   display.clear()
-  display.drawText(font.UI_12, 50, 100, "Hello from Lua!")
-  display.drawText(font.UI_10, 50, 130, "Press any button to exit")
+  display.drawText(fonts.ui, 50, 100, "Hello from Lua!")
   display.refresh()
 end
 
 function plugin.loop()
-  local btn = input.poll()
-  if btn == input.BACK then
-    system.log("Goodbye!")
-    plugin.finish()
+  if input.wasPressed(input.BACK) then
+    plugin.goHome()
   end
 end
 
 function plugin.onExit()
-  -- cleanup if needed
+  require("lib.fonts").cleanup()
 end
 ```
 
-Reboot the device. "Hello" appears in the home menu.
+### Folder plugin (community plugins)
+Create `/plugins/hello/main.lua`:
+
+```
+/plugins/hello/
+  main.lua          ← entry point (required, contains plugin table)
+  helpers.lua       ← additional modules
+  data/             ← assets, configs, images
+```
+
+`main.lua` uses the same format as a single-file plugin. The folder can contain any additional files the plugin needs — helper modules, data files, assets, etc.
+
+Reboot the device (or long-press power to reload). The plugin appears in the home menu.
+
+### Templates
+
+Ready-to-use templates are in `/templates/` on the SD card:
+
+| Template | Description |
+|----------|-------------|
+| `plugin_single_file.lua` | Single-file plugin starter |
+| `community_plugin/` | Folder plugin starter with comments and structure |
+| `home_lyra.lua` | Lyra-style home screen |
+| `home_classic.lua` | Classic home screen |
+
+Copy a template to `/plugins/` and edit to create your plugin.
 
 ## Plugin Types
 
@@ -91,9 +118,33 @@ function plugin.onEvent(event)
 end
 ```
 
+## Plugin Discovery
+
+The plugin manager scans `/plugins/` on boot (or on SD reload via power long-press):
+
+1. **Single-file plugins**: Any `.lua` file directly in `/plugins/` (e.g., `/plugins/my_tool.lua`)
+2. **Folder plugins**: Any subdirectory containing `main.lua` (e.g., `/plugins/my_tool/main.lua`)
+
+Skipped automatically:
+- `/plugins/lib/` — reserved for shared Lua modules
+- Dotfiles and dot-directories (`.hidden`)
+- Directories without a `main.lua`
+- Non-`.lua` files
+
+Both formats use the same manifest and lifecycle — the only difference is where the entry point file lives.
+
+### When to use a folder plugin
+- Your plugin has multiple `.lua` files (helpers, modules, screens)
+- Your plugin ships with data files (configs, assets, templates)
+- You're distributing your plugin for others to install (drop one folder on SD)
+
+### When to use a single file
+- Simple plugins with all logic in one file
+- Core system plugins (home, settings, file_browser)
+
 ## Plugin Manifest
 
-Every plugin must define a `plugin` table:
+Every plugin must define a `plugin` table (in `main.lua` for folder plugins, or in the `.lua` file for single-file plugins):
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -176,10 +227,15 @@ display.drawText(fonts.reader, x, y, "Book") -- user's reader font (with fallbac
 fonts.reload_reader()                        -- reload after font/language settings change
 fonts.cleanup()                              -- unload all (call in onExit)
 
+-- Discover available font packs from /fonts/ subdirectories:
+local families = fonts.discover_families()   -- returns e.g. {"Bookerly", "NotoSans"}
+
 -- Script detection for reader plugins:
 local scripts = fonts.detect_scripts(text)   -- returns e.g. {"hebrew"}
 fonts.detect_fallbacks(text)                 -- auto-load fallback from text content
 ```
+
+See `docs/font-packs.md` for how to create and install font packs.
 
 ### lib.progress
 Reading progress persistence. Stores progress alongside book files.
@@ -288,6 +344,8 @@ end)
 
 The hook is cleared automatically on plugin exit. Errors in the hook are caught and logged — they don't prevent sleep.
 
+See `docs/sleep-screen.md` for wallpaper formats, modes, and full API reference.
+
 ### Power Button
 - Short press (0.5-2s): Manual sleep
 - Long press (>2s): SD card reload — re-mounts SD and restarts plugins from home. Useful after editing Lua files without reflashing.
@@ -299,13 +357,40 @@ system.reload()  -- reinit SD card and restart from home
 
 ## Templates
 
-Home screen templates live in `/templates/` on the SD card. To customize:
+Templates are in the `templates/` directory of the repository:
 
-1. Pick a template (e.g., `home_classic.lua`)
-2. Copy it to `/plugins/home.lua`
-3. Reboot — your custom home screen loads
+| Template | Type | Description |
+|----------|------|-------------|
+| `plugin_single_file.lua` | File | Minimal single-file plugin starter |
+| `community_plugin/` | Folder | Full folder plugin with comments and structure |
+| `home_lyra.lua` | File | Lyra-style home screen |
+| `home_classic.lua` | File | Classic home screen |
 
-Anyone can create and share templates. They're just Lua plugins that define `id = "home"`.
+### Creating a plugin from a template
+
+**Single-file:**
+1. Copy `plugin_single_file.lua` from `templates/` to `/plugins/my_plugin.lua` on your SD card
+2. Edit the `plugin` table (change name, id, menuEntry)
+3. Reboot or long-press power to reload
+
+**Folder plugin (community):**
+1. Copy `community_plugin/` from `templates/` to `/plugins/my_plugin/` on your SD card
+2. Edit `main.lua` — change the manifest, add your logic
+3. Add helper files, data, assets as needed
+4. Reboot or long-press power to reload
+
+**Custom home screen:**
+1. Copy `home_lyra.lua` from `templates/` to `/plugins/home.lua` on your SD card
+2. Edit to customize — must keep `id = "home"`
+3. Reboot
+
+### Distributing plugins
+
+To share a plugin with others:
+- **Single-file**: share the `.lua` file — user drops it in `/plugins/`
+- **Folder plugin**: share the folder as a zip — user extracts to `/plugins/`
+
+Folder plugins are self-contained: all files live in one directory, nothing to configure.
 
 ## Tips
 

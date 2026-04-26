@@ -149,6 +149,17 @@ Currently available:
 - `en/` — English (default)
 - `he/` — Hebrew (NotoSansHebrew, sizes 12-18)
 
+## Repository Structure
+
+The repository separates distributable packs from the SD card staging area:
+
+| Directory | Purpose | Copies to SD |
+|-----------|---------|-------------|
+| `lang_packs/` | Pre-built language packs | `/languages/` |
+| `font_packs/` | Pre-built font packs | `/fonts/` |
+| `templates/` | Plugin templates | `/plugins/` |
+| `sdcard/` | SD card staging (default contents) | Root of SD |
+
 ## Lua API
 
 ```lua

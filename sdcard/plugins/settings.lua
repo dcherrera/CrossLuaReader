@@ -17,6 +17,7 @@ plugin = {
 }
 
 local selected = 1
+local scroll_offset = 0
 local needs_render = true
 local needs_full_refresh = false
 
@@ -24,7 +25,7 @@ local needs_full_refresh = false
 local menu_items = {
     { key = "language",         label = "", values = {}, display = {} },  -- populated dynamically
     { key = "theme",            label = "", values = {"lyra", "classic"},                      display = {"Lyra", "Classic"} },
-    { key = "fontFamily",       label = "", values = {"NotoSans", "Bookerly", "OpenDyslexic"}, display = {"Noto Sans", "Bookerly", "OpenDyslexic"} },
+    { key = "fontFamily",       label = "", values = {}, display = {} },  -- populated dynamically
     { key = "fontSize",         label = "", values = {"12", "14", "16", "18"},                 display = {"Small", "Medium", "Large", "X-Large"} },
     { key = "orientation",      label = "", values = {0, 1, 2, 3},                             display = {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"} },
     { key = "screenMargin",     label = "", values = {0, 5, 10, 15, 20},                       display = {"0", "5", "10", "15", "20"} },
@@ -91,21 +92,55 @@ function plugin.onEnter()
         lang_item.display = {"English"}
     end
 
+    -- Discover font families from /fonts/ subdirectories
+    local families = fonts.discover_families()
+    local font_item = nil
+    for _, item in ipairs(menu_items) do
+        if item.key == "fontFamily" then font_item = item; break end
+    end
+    if font_item then
+        font_item.values = {}
+        font_item.display = {}
+        for _, name in ipairs(families) do
+            font_item.values[#font_item.values + 1] = name
+            font_item.display[#font_item.display + 1] = name
+        end
+        if #font_item.values == 0 then
+            font_item.values = {"NotoSans"}
+            font_item.display = {"NotoSans"}
+        end
+    end
+
     fonts.init()
     update_labels()
     selected = 1
+    scroll_offset = 0
     needs_render = true
 end
 
+local function get_max_visible()
+    local t = theme.get()
+    local cx, cy, cw, ch = display.contentArea()
+    return math.floor((ch - t.header_height - t.vertical_spacing) / (t.menu_row_height + t.vertical_spacing))
+end
+
 function plugin.loop()
+    local max_visible = get_max_visible()
+
     if input.wasPressed(input.DOWN) then
         if selected < #menu_items then
             selected = selected + 1
+            if selected > scroll_offset + max_visible then
+                scroll_offset = selected - max_visible
+            end
             needs_render = true
         end
     elseif input.wasPressed(input.UP) then
         if selected > 1 then
             selected = selected - 1
+            if selected <= scroll_offset then
+                scroll_offset = selected - 1
+            end
             needs_render = true
         end
     elseif input.wasPressed(input.CONFIRM) or input.wasPressed(input.RIGHT) then
@@ -140,8 +175,9 @@ function render()
     if fonts.ui then
         ui.draw_header(fonts.ui, "Settings")
         local cx, cy, cw, ch = display.contentArea()
-        local menu_y = cy + t.header_height + t.vertical_spacing
-        ui.draw_menu(fonts.ui, menu_items, selected, menu_y)
+        local list_y = cy + t.header_height + t.vertical_spacing
+        local max_visible = get_max_visible()
+        ui.draw_list(fonts.ui, menu_items, selected, list_y, max_visible, scroll_offset)
         ui.draw_button_hints(fonts.ui, buttons.get("settings", settings.get("orientation", 0)))
     end
 

@@ -2,8 +2,14 @@
 -- Loads UI and reader fonts based on settings. All plugins use
 -- fonts.ui and fonts.reader instead of loading fonts directly.
 -- Supports fallback fonts for non-Latin scripts (Phase 7).
+-- Font packs: drop a folder in /fonts/ with .cfont files inside.
 
 local M = {}
+
+-- Resolve a font path: /fonts/{family}/{family}-{size}-{style}.cfont
+local function font_path(family, size, style)
+    return "/fonts/" .. family .. "/" .. family .. "-" .. size .. "-" .. style .. ".cfont"
+end
 
 M.ui = nil        -- Ubuntu 12 UI font ID (always loaded)
 M.reader = nil    -- Reader font ID (from settings: family + size)
@@ -105,10 +111,10 @@ function M.init()
 
     -- UI font: always Ubuntu 12
     if not M.ui then
-        M.ui = font.load("/fonts/Ubuntu-12-Regular.cfont")
+        M.ui = font.load(font_path("Ubuntu", "12", "Regular"))
         if not M.ui then
             system.log("WARN: Failed to load UI font, trying NotoSans")
-            M.ui = font.load("/fonts/NotoSans-12-Regular.cfont")
+            M.ui = font.load(font_path("NotoSans", "12", "Regular"))
         end
     end
 
@@ -116,12 +122,12 @@ function M.init()
     if not M.reader then
         local family = settings.get("fontFamily", "NotoSans")
         local size = settings.get("fontSize", "14")
-        local path = "/fonts/" .. family .. "-" .. size .. "-Regular.cfont"
+        local path = font_path(family, size, "Regular")
 
         M.reader = font.load(path)
         if not M.reader then
             system.log("WARN: Failed to load reader font " .. path .. ", falling back")
-            M.reader = font.load("/fonts/NotoSans-14-Regular.cfont")
+            M.reader = font.load(font_path("NotoSans", "14", "Regular"))
         end
     end
 
@@ -177,12 +183,12 @@ function M.reload_reader()
     local settings = require("lib.settings")
     local family = settings.get("fontFamily", "NotoSans")
     local size = settings.get("fontSize", "14")
-    local path = "/fonts/" .. family .. "-" .. size .. "-Regular.cfont"
+    local path = font_path(family, size, "Regular")
 
     M.reader = font.load(path)
     if not M.reader then
         system.log("WARN: Failed to reload reader font " .. path)
-        M.reader = font.load("/fonts/NotoSans-14-Regular.cfont")
+        M.reader = font.load(font_path("NotoSans", "14", "Regular"))
     end
 
     -- Re-establish fallback
@@ -197,6 +203,33 @@ function M.reload_reader()
             M.load_fallback_for_script("arabic")
         end
     end
+end
+
+--- Discover available font families by scanning /fonts/ subdirectories.
+-- A valid font pack is a subfolder containing at least one .cfont file.
+-- @return Sorted list of family names (e.g. {"Bookerly", "NotoSans", "OpenDyslexic"})
+function M.discover_families()
+    local families = {}
+    local entries = storage.list("/fonts")
+    if not entries then return families end
+
+    for _, e in ipairs(entries) do
+        if e.isDir and e.name:sub(1, 1) ~= "." then
+            -- Check if folder has at least one .cfont file
+            local files = storage.list("/fonts/" .. e.name)
+            if files then
+                for _, f in ipairs(files) do
+                    if not f.isDir and f.name:match("%.cfont$") then
+                        families[#families + 1] = e.name
+                        break
+                    end
+                end
+            end
+        end
+    end
+
+    table.sort(families)
+    return families
 end
 
 return M
