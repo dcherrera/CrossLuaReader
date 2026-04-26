@@ -36,7 +36,10 @@ Draw a rectangle outline (1px border).
 Draw a filled rectangle.
 
 ### display.fillRoundedRect(x, y, w, h, [radius])
-Draw a filled rectangle with rounded corners. `radius` defaults to 6. Used for Lyra-style selection highlights and UI elements.
+Draw a filled black rectangle with rounded corners. `radius` defaults to 6.
+
+### display.fillRoundedRectGray(x, y, w, h, [radius])
+Draw a filled rectangle with rounded corners using a dithered gray checkerboard pattern. `radius` defaults to 6. **This is the recommended selection highlight** — text remains readable on the gray background, matching CrossPoint's Lyra theme.
 
 ### display.drawTextInverted(fontId, x, y, text)
 Draw white text (for rendering text on a dark/selected background). Same as `drawText` but draws white pixels instead of black.
@@ -75,13 +78,13 @@ display.refresh()
 Button state queries and constants.
 
 ### input.poll()
-Update button states. Call once per frame in your `loop()`.
+No-op — the main loop polls buttons automatically before calling your `loop()`. This function exists for API compatibility but does nothing. **Do not call `hal_gpio_poll()` manually** — it would clear button edge states.
 
 ### input.isPressed(button) → bool
 True if button is currently held down.
 
 ### input.wasPressed(button) → bool
-True if button was pressed since last `poll()`.
+True if button was pressed since last frame.
 
 ### input.wasAnyPressed() → bool
 True if any button was pressed since last `poll()`.

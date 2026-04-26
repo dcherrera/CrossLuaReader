@@ -164,18 +164,36 @@ theme.set("classic")  -- or "lyra" (default)
 ```
 
 ### lib.ui
-Shared UI drawing helpers. Uses theme metrics automatically.
+Shared UI drawing helpers. Uses theme metrics automatically. Selection highlights use dithered gray (readable text on gray background, matching CrossPoint's Lyra theme).
 
 ```lua
 local ui = require("lib.ui")
 
 ui.draw_header(font_id, "My Plugin")        -- top bar with battery
-ui.draw_menu(font_id, items, selected, y)    -- scrollable menu with selection highlight
+ui.draw_menu(font_id, items, selected, y)    -- scrollable menu with gray selection
 ui.draw_list(font_id, items, selected, y, max_visible, scroll_offset)  -- file/item list
-ui.draw_button_hints(font_id, {"< Back", "Select", ""})  -- bottom hint bar
+ui.draw_button_hints(font_id, {"Back", "Select", "", ""})  -- CrossPoint-style 4-button bar
 ```
 
 Menu items format: `{ {label="Browse Files"}, {label="Settings"} }`
+
+Button hints: pass a table of 4 strings for the 4 front buttons `{Back, Confirm, Left, Right}`. Use `""` for empty buttons. Rendered as bordered cells matching CrossPoint's button hint bar.
+
+### lib.buttons
+Shared button label definitions. Edit this one file to customize labels everywhere.
+
+```lua
+local buttons = require("lib.buttons")
+
+-- Pre-defined layouts:
+ui.draw_button_hints(font_id, buttons.home)     -- {"Back", "Select", "", ""}
+ui.draw_button_hints(font_id, buttons.browser)   -- {"Back", "Open", "", ""}
+ui.draw_button_hints(font_id, buttons.settings)   -- {"Back", "Change", "", ""}
+ui.draw_button_hints(font_id, buttons.reader)     -- {"Back", "", "Prev", "Next"}
+ui.draw_button_hints(font_id, buttons.confirm)    -- {"Cancel", "OK", "", ""}
+```
+
+To customize button labels globally, edit `/plugins/lib/buttons.lua`.
 
 ### lib.status_bar
 Reader status bar for book progress.
