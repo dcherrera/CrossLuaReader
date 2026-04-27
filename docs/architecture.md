@@ -43,6 +43,7 @@ CrossLuaReader/
 │   │   ├── api_wifi.c/h        # wifi.* module
 │   │   ├── api_font.c/h        # font.* module
 │   │   ├── api_system.c/h      # system.* module
+│   │   ├── api_text.c/h        # text.* module (streaming indexing + page layout)
 │   │   └── api_register.c/h    # Registers all modules with Lua state
 │   ├── plugin/             # Plugin lifecycle management
 │   │   └── plugin_manager.c/h  # Discovery, loading, switching, error handling

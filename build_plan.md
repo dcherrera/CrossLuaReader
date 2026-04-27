@@ -101,47 +101,35 @@
 
 ## Phase 9: Reader Plugins
 
-- \[ \] Implement `zip.*` C API (open, list, read, close) — wraps miniz/uzlib
-
-- \[ \] Implement `xml.*` C API (parse, find, attr, text) — wraps expat or simple SAX
-
-- \[ \] Write shared reader library (`/plugins/lib/reader_utils.lua`)
-
+- [x] Implement `text.*` C API (indexPages, getPageLines) — streaming word-wrap and pagination in C
+  - 8KB static chunk buffer, 1KB line buffer — zero stack/heap pressure
+  - Word wrapping uses font_render measurement directly (glyph cache stays warm)
+  - Single file handle kept open during full index scan
+  - Returns page byte offsets as Lua table
+- [x] Write shared reader library (`/plugins/lib/reader_utils.lua`)
   - Page turn handling (forward, back, long-press chapter skip)
-
   - Progress save/load via lib/progress.lua
-
   - Status bar integration via lib/status_bar.lua
-
   - Orientation-aware viewport calculation
-
   - Screen refresh management (full refresh every N pages, configurable)
-
   - Cache directory convention: `/cache/{plugin_id}/`
-
-- \[ \] Write TXT reader plugin (`/plugins/txt_reader.lua`)
-
-  - Streaming file reading (8KB chunks, not full file in memory)
-
-  - Word wrapping with viewport awareness
-
-  - Page offset indexing and caching to `/cache/txt_reader/`
-
+- [x] Write shared text layout library (`/plugins/lib/text_layout.lua`)
+  - UTF-8 safe chunk splitting, RTL detection, word wrap (for MD inline rendering)
+- [x] Write TXT reader plugin (`/plugins/txt_reader.lua`)
+  - C-side streaming indexing via text.indexPages() — fast, zero Lua heap
+  - C-side page rendering via text.getPageLines()
+  - Page offset caching to `/cache/txt_reader/`
   - RTL detection and right-alignment
-
   - Progress persistence via lib/progress.lua
-
   - Font fallback via lib/fonts.lua
-
-- \[ \] Write MD reader plugin (`/plugins/md_reader.lua`)
-
-  - Markdown parsing: headers, bold/italic, lists, blockquotes, code blocks, horizontal rules, links, images, task lists
-
-  - Styled span rendering with BiDi support
-
+  - [ ] Fix: page count too low (viewport calculation issue)
+  - [ ] Fix: fast refresh not updating screen (half refresh workaround)
+- [x] Write MD reader plugin (`/plugins/md_reader.lua`)
+  - Markdown parsing: headers, bold/italic, lists, blockquotes, code blocks, horizontal rules, links
+  - Bold as double-strike, italic as underline, code with rect background
   - Nested list indentation
-
-  - Page indexing with code block state tracking
+  - Page indexing with code block state tracking via character-count estimation
+  - [ ] Test on device
 
 - \[ \] Write EPUB reader plugin (`/plugins/epub_reader.lua`)
 

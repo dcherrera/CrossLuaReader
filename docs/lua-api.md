@@ -307,6 +307,45 @@ font.unload(reader)
 
 ---
 
+## text
+
+C-side text indexing and page layout. Streams files from SD in 8KB chunks — never loads the full file. Word wrapping uses font measurement directly in C for maximum speed.
+
+### text.indexPages(fontId, path, viewportWidth, linesPerPage) → table
+
+Scan an entire text file and build a page offset index. Streams the file in 8KB chunks, word-wraps each line with font measurement, and returns a Lua table of byte offsets (one per page). The file is never fully loaded into memory.
+
+- Keeps one file handle open during the entire scan (no open/close per chunk)
+- Uses static 8KB buffer (no heap allocation)
+- Glyph cache stays warm across the scan
+- Returns `nil, errmsg` on failure
+
+### text.getPageLines(fontId, path, offset, viewportWidth, linesPerPage) → table
+
+Read one page of text starting at a byte offset. Word-wraps with font measurement and returns a table of display line strings. Each string is one wrapped line ready for `display.drawText()`.
+
+Returns `nil` on failure.
+
+**Example:**
+```lua
+local fonts = require("lib.fonts")
+fonts.init()
+
+-- Index the file (fast, C-side)
+local offsets = text.indexPages(fonts.reader, "/books/story.txt", 440, 22)
+
+-- Render page 5
+local lines = text.getPageLines(fonts.reader, "/books/story.txt",
+    offsets[5], 440, 22)
+
+for i, line in ipairs(lines) do
+    display.drawText(fonts.reader, 20, 20 + (i-1) * 18, line)
+end
+display.refresh()
+```
+
+---
+
 ## Complete Plugin Example
 
 ```lua
