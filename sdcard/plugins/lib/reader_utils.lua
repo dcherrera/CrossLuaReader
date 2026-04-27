@@ -91,7 +91,6 @@ end
 function M.draw_page_chrome(font_id, page, total_pages, title)
     local pct = total_pages > 0 and (page / total_pages * 100) or 0
     status_bar.draw(font_id, pct, page, total_pages, title)
-    ui.draw_button_hints(font_id, buttons.get("reader", settings.get("orientation", 0)))
 end
 
 --- Save reading progress (debounced — only writes if page changed).
