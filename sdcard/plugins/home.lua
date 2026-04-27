@@ -41,8 +41,8 @@ function plugin.onEnter()
     -- Load language pack
     lang.load(settings.get("language", "en"))
 
-    -- Load fonts (includes fallback based on language)
-    fonts.init()
+    -- Load fonts (skip reader font — home only uses UI font)
+    fonts.init({skip_reader = true})
 
     -- Build menu with translated labels
     menu_items = {

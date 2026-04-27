@@ -4,6 +4,25 @@
 local theme = require("lib.theme")
 local M = {}
 
+--- Check if current language is RTL.
+local function is_rtl()
+    local ok, lang = pcall(require, "lib.lang")
+    if ok and lang.get_direction then
+        return lang.get_direction() == "rtl"
+    end
+    return false
+end
+
+--- Draw text, right-aligned if RTL.
+local function draw_text_aligned(font_id, x, y, text, row_x, row_w, padding)
+    if is_rtl() then
+        local tw = display.getTextWidth(font_id, text)
+        display.drawText(font_id, row_x + row_w - padding - tw, y, text)
+    else
+        display.drawText(font_id, x, y, text)
+    end
+end
+
 --- Draw the header bar with battery indicator.
 -- Uses content area bounds so header stays within usable region.
 -- @param font_id Font ID for text
@@ -12,11 +31,15 @@ function M.draw_header(font_id, title)
     local t = theme.get()
     local cx, cy, cw, ch = display.contentArea()
 
-    -- Battery percentage in top-right of content area
+    -- Battery percentage — opposite side from title in RTL
     local bat = system.batteryPercent()
     local bat_text = bat .. "%"
     local bat_w = display.getTextWidth(font_id, bat_text)
-    display.drawText(font_id, math.floor(cx + cw - bat_w - t.side_padding), cy + t.top_padding, bat_text)
+    if is_rtl() then
+        display.drawText(font_id, cx + t.side_padding, cy + t.top_padding, bat_text)
+    else
+        display.drawText(font_id, math.floor(cx + cw - bat_w - t.side_padding), cy + t.top_padding, bat_text)
+    end
 
     -- Title centered in content area
     if title then
@@ -60,10 +83,10 @@ function M.draw_menu(font_id, items, selected, y_start)
 
         if i == selected then
             display.fillRoundedRectGray(row_x, y, row_w, row_h, t.corner_radius)
-            display.drawText(font_id, row_x + t.selection_padding, math.floor(y + t.selection_padding), item.label)
-        else
-            display.drawText(font_id, row_x + t.selection_padding, math.floor(y + t.selection_padding), item.label)
         end
+
+        draw_text_aligned(font_id, row_x + t.selection_padding, math.floor(y + t.selection_padding),
+                          item.label, row_x, row_w, t.selection_padding)
 
         y = y + row_h + t.vertical_spacing
     end
@@ -99,10 +122,10 @@ function M.draw_list(font_id, items, selected, y_start, max_visible, scroll_offs
 
         if idx == selected then
             display.fillRoundedRectGray(row_x, y, row_w, row_h, t.corner_radius)
-            display.drawText(font_id, row_x + t.selection_padding, math.floor(y + 2), item.label)
-        else
-            display.drawText(font_id, row_x + t.selection_padding, math.floor(y + 2), item.label)
         end
+
+        draw_text_aligned(font_id, row_x + t.selection_padding, math.floor(y + 2),
+                          item.label, row_x, row_w, t.selection_padding)
 
         y = y + row_h
     end

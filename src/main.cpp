@@ -74,7 +74,7 @@ void setup() {
 
     /* Step 8.5: Boot font — loaded before Lua for crash/sleep screens */
     {
-        int bf = font_manager_load("/fonts/NotoSans/NotoSans-12-Regular.cfont");
+        int bf = font_manager_load("/fonts/Ubuntu/Ubuntu-12-Regular.cfont");
         if (bf >= 0) {
             boot_font_set_id(bf);
             LOG_INF("MAIN", "Boot font loaded: slot %d", bf);
@@ -127,7 +127,15 @@ void loop() {
             }
             hal_display_refresh(REFRESH_FAST);
 
+            /* Stop current plugin (closes Lua state + files) */
+            plugin_manager_stop();
+
+            /* Reinit SD card */
+            vTaskDelay(50 / portTICK_PERIOD_MS);
             hal_storage_reinit();
+            vTaskDelay(50 / portTICK_PERIOD_MS);
+
+            /* Re-discover plugins and start home */
             plugin_manager_reinit();
             plugin_manager_start("home", NULL);
         }

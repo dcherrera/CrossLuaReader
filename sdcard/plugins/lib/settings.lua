@@ -78,6 +78,14 @@ function M.load()
         system.log("No settings file — using defaults")
     end
 
+    -- Migrate stale display names to actual values (pre-Phase 8 bug)
+    local font_size_map = {Small="12", Medium="14", Large="16", ["X-Large"]="18"}
+    if font_size_map[data.fontSize] then
+        data.fontSize = font_size_map[data.fontSize]
+        M.save()
+        system.log("Migrated fontSize to " .. data.fontSize)
+    end
+
     loaded = true
 end
 

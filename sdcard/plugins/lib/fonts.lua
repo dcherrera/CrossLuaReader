@@ -53,11 +53,15 @@ end
 function M.load_fallback_for_script(script)
     local settings = require("lib.settings")
     local lang_code = SCRIPT_LANG[script]
-    if not lang_code then return false end
+    if not lang_code then
+        system.log("FALLBACK: no lang_code for script " .. script)
+        return false
+    end
 
     -- Determine font family from language pack
     local lang = require("lib.lang")
     local family = lang.get_font_family()
+    system.log("FALLBACK: script=" .. script .. " lang_code=" .. lang_code .. " family=" .. tostring(family))
     if not family then
         -- Default family per script
         if script == "hebrew" then family = "NotoSansHebrew" end
@@ -66,9 +70,10 @@ function M.load_fallback_for_script(script)
 
     local size = settings.get("fontSize", "14")
     local path = "/languages/" .. lang_code .. "/fonts/" .. family .. "-" .. size .. "-Regular.cfont"
+    system.log("FALLBACK: trying path " .. path)
 
     if not storage.exists(path) then
-        system.log("Fallback font not found: " .. path)
+        system.log("FALLBACK: file not found: " .. path)
         return false
     end
 
@@ -85,7 +90,10 @@ function M.load_fallback_for_script(script)
         return false
     end
 
-    -- Set as fallback for reader font
+    -- Set as fallback for both UI and reader fonts
+    if M.ui then
+        font.setFallback(M.ui, M.fallback)
+    end
     if M.reader then
         font.setFallback(M.reader, M.fallback)
     end
@@ -105,21 +113,29 @@ function M.detect_fallbacks(text_sample)
 end
 
 --- Initialize fonts based on current settings.
+-- @param opts Optional table: {skip_reader=true} to skip reader font (saves ~25KB RAM)
 -- Call in every plugin's onEnter(). Safe to call multiple times.
-function M.init()
+function M.init(opts)
     local settings = require("lib.settings")
+    local skip_reader = opts and opts.skip_reader
 
-    -- UI font: always Ubuntu 12
+    -- UI font: reuse boot font (slot 0, loaded in C before Lua)
+    -- This avoids a duplicate 31KB allocation
     if not M.ui then
-        M.ui = font.load(font_path("Ubuntu", "12", "Regular"))
-        if not M.ui then
-            system.log("WARN: Failed to load UI font, trying NotoSans")
-            M.ui = font.load(font_path("NotoSans", "12", "Regular"))
+        local boot_id = 0  -- boot font is always slot 0
+        local test = display.getTextWidth(boot_id, "X")
+        if test and test > 0 then
+            M.ui = boot_id
+        else
+            M.ui = font.load(font_path("Ubuntu", "12", "Regular"))
+            if not M.ui then
+                M.ui = font.load(font_path("NotoSans", "12", "Regular"))
+            end
         end
     end
 
-    -- Reader font: from settings
-    if not M.reader then
+    -- Reader font: from settings (skip if not needed, e.g. settings plugin)
+    if not skip_reader and not M.reader then
         local family = settings.get("fontFamily", "NotoSans")
         local size = settings.get("fontSize", "14")
         local path = font_path(family, size, "Regular")
@@ -141,24 +157,26 @@ function M.init()
         end
     end
 
-    if not M.ui and not M.reader then
+    if not M.ui then
         system.log("ERROR: No fonts available!")
     end
 end
 
 --- Unload all fonts. Call in every plugin's onExit().
 function M.cleanup()
-    if M.reader and M.fallback then
-        font.clearFallback(M.reader)
+    if M.fallback then
+        if M.ui then font.clearFallback(M.ui) end
+        if M.reader then font.clearFallback(M.reader) end
     end
     if M.fallback then
         font.unload(M.fallback)
         M.fallback = nil
     end
-    if M.ui then
+    if M.ui and M.ui ~= 0 then
+        -- Only unload if it's NOT the boot font (slot 0)
         font.unload(M.ui)
-        M.ui = nil
     end
+    M.ui = nil
     if M.reader then
         font.unload(M.reader)
         M.reader = nil
@@ -168,10 +186,11 @@ end
 --- Reload reader font after settings change (e.g., font family or size changed).
 -- Re-establishes fallback on the new reader font.
 function M.reload_reader()
-    -- Clear fallback from old reader
+    -- Clear fallback from old fonts
     local had_fallback = M.fallback ~= nil
-    if M.reader and M.fallback then
-        font.clearFallback(M.reader)
+    if M.fallback then
+        if M.ui then font.clearFallback(M.ui) end
+        if M.reader then font.clearFallback(M.reader) end
     end
 
     -- Unload and reload reader
@@ -191,17 +210,18 @@ function M.reload_reader()
         M.reader = font.load(font_path("NotoSans", "14", "Regular"))
     end
 
-    -- Re-establish fallback
-    if had_fallback and M.reader and M.fallback then
-        -- Fallback font size may have changed, reload it
+    -- Unload old fallback if present
+    if M.fallback then
         font.unload(M.fallback)
         M.fallback = nil
-        local lang_code = settings.get("language", "en")
-        if lang_code == "he" then
-            M.load_fallback_for_script("hebrew")
-        elseif lang_code == "ar" then
-            M.load_fallback_for_script("arabic")
-        end
+    end
+
+    -- Load fallback based on current language setting
+    local lang_code = settings.get("language", "en")
+    if lang_code == "he" then
+        M.load_fallback_for_script("hebrew")
+    elseif lang_code == "ar" then
+        M.load_fallback_for_script("arabic")
     end
 end
 

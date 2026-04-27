@@ -140,6 +140,16 @@ function M.get(context, orientation)
     local actions = M.actions[context] or M.actions.default
     local mapping = M.get_mapping(orientation)
 
+    -- Translate labels through lang.tr() if available
+    local ok, lang = pcall(require, "lib.lang")
+    local function tr(s)
+        if s == "" then return "" end
+        if ok and lang.tr then
+            return lang.tr(s:lower())
+        end
+        return s
+    end
+
     -- Build labels for the 4 front buttons (hardware indices 0-3)
     local labels = {"", "", "", ""}
     local roles = {"back", "confirm", "left", "right", "up", "down"}
@@ -149,7 +159,7 @@ function M.get(context, orientation)
         if hw and hw >= 0 and hw <= 3 then
             local label = actions[role] or ""
             if label ~= "" and labels[hw + 1] == "" then
-                labels[hw + 1] = label
+                labels[hw + 1] = tr(label)
             end
         end
     end

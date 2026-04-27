@@ -63,7 +63,7 @@ local function load_directory(path)
 end
 
 function plugin.onEnter(path)
-    fonts.init()
+    fonts.init({skip_reader = true})
     current_path = path or "/"
     load_directory(current_path)
     needs_render = true

@@ -21,19 +21,40 @@ local scroll_offset = 0
 local needs_render = true
 local needs_full_refresh = false
 
--- Static settings menu items
+-- Settings menu item definitions
+-- display_keys: translation keys for display values (looked up via lang.tr)
+-- display: populated at runtime from display_keys
 local menu_items = {
-    { key = "language",         label = "", values = {}, display = {} },  -- populated dynamically
-    { key = "theme",            label = "", values = {"lyra", "classic"},                      display = {"Lyra", "Classic"} },
-    { key = "fontFamily",       label = "", values = {}, display = {} },  -- populated dynamically
-    { key = "fontSize",         label = "", values = {"12", "14", "16", "18"},                 display = {"Small", "Medium", "Large", "X-Large"} },
-    { key = "orientation",      label = "", values = {0, 1, 2, 3},                             display = {"Portrait", "Landscape CW", "Inverted", "Landscape CCW"} },
-    { key = "screenMargin",     label = "", values = {0, 5, 10, 15, 20},                       display = {"0", "5", "10", "15", "20"} },
-    { key = "refreshFrequency", label = "", values = {1, 5, 10, 15, 30},                       display = {"1 page", "5 pages", "10 pages", "15 pages", "30 pages"} },
-    { key = "sleepTimeout",     label = "", values = {1, 5, 10, 15, 30},                       display = {"1 min", "5 min", "10 min", "15 min", "30 min"} },
+    { key = "language",         label = "", values = {}, display = {} },
+    { key = "theme",            label = "", values = {"lyra", "classic"},  display = {}, display_raw = {"Lyra", "Classic"} },
+    { key = "fontFamily",       label = "", values = {}, display = {} },
+    { key = "fontSize",         label = "", values = {"12", "14", "16", "18"},
+                                display = {}, display_keys = {"small", "medium", "large", "x-large"} },
+    { key = "orientation",      label = "", values = {0, 1, 2, 3},
+                                display = {}, display_keys = {"portrait", "landscape_cw", "inverted", "landscape_ccw"} },
+    { key = "screenMargin",     label = "", values = {0, 5, 10, 15, 20},  display = {}, display_raw = {"0", "5", "10", "15", "20"} },
+    { key = "refreshFrequency", label = "", values = {1, 5, 10, 15, 30},  display = {}, display_raw = {"1", "5", "10", "15", "30"} },
+    { key = "sleepTimeout",     label = "", values = {1, 5, 10, 15, 30},  display = {}, display_raw = {"1 min", "5 min", "10 min", "15 min", "30 min"} },
     { key = "sleepMode",        label = "", values = {"blank", "single", "cycle", "random", "clear"},
-                                                      display = {"Blank", "Wallpaper", "Cycle", "Random", "Stay on page"} },
+                                display = {}, display_keys = {"blank", "wallpaper", "cycle", "random", "stay_on_page"} },
 }
+
+-- Rebuild display names from translation keys
+local function rebuild_display()
+    for _, item in ipairs(menu_items) do
+        if item.display_keys then
+            item.display = {}
+            for _, k in ipairs(item.display_keys) do
+                item.display[#item.display + 1] = lang.tr(k)
+            end
+        elseif item.display_raw then
+            item.display = {}
+            for _, v in ipairs(item.display_raw) do
+                item.display[#item.display + 1] = v
+            end
+        end
+    end
+end
 
 local function find_value_index(item)
     local current = settings.get(item.key)
@@ -43,10 +64,24 @@ local function find_value_index(item)
     return 1
 end
 
+-- Map settings keys to lang.json translation keys
+local tr_keys = {
+    language = "language",
+    theme = "theme",
+    fontFamily = "font_family",
+    fontSize = "font_size",
+    orientation = "orientation",
+    screenMargin = "screen_margin",
+    refreshFrequency = "refresh_freq",
+    sleepTimeout = "sleep_timeout",
+    sleepMode = "sleep_mode",
+}
+
 local function update_labels()
     for _, item in ipairs(menu_items) do
         local idx = find_value_index(item)
-        local name = item.key:gsub("(%l)(%u)", "%1 %2"):gsub("^%l", string.upper)
+        local tr_key = tr_keys[item.key]
+        local name = tr_key and lang.tr(tr_key) or item.key
         item.label = name .. ": " .. item.display[idx]
     end
 end
@@ -67,7 +102,19 @@ local function apply_setting(item, value)
         system.setSleepTimeout(value)
     elseif item.key == "language" then
         lang.load(value)
-        fonts.reload_reader()
+        rebuild_display()
+        -- Unload old fallback
+        if fonts.fallback then
+            if fonts.ui then font.clearFallback(fonts.ui) end
+            font.unload(fonts.fallback)
+            fonts.fallback = nil
+        end
+        -- Load new fallback for this language
+        if value == "he" then
+            fonts.load_fallback_for_script("hebrew")
+        elseif value == "ar" then
+            fonts.load_fallback_for_script("arabic")
+        end
     elseif item.key == "sleepMode" then
         local mode_map = {blank=0, single=1, cycle=2, random=3, clear=4}
         system.setSleepMode(mode_map[value] or 0)
@@ -111,7 +158,11 @@ function plugin.onEnter()
         end
     end
 
-    fonts.init()
+    -- Load language and rebuild translated display names
+    lang.load(settings.get("language", "en"))
+    rebuild_display()
+
+    fonts.init({skip_reader = true})
     update_labels()
     selected = 1
     scroll_offset = 0
@@ -173,7 +224,7 @@ function render()
     display.clear()
 
     if fonts.ui then
-        ui.draw_header(fonts.ui, "Settings")
+        ui.draw_header(fonts.ui, lang.tr("settings"))
         local cx, cy, cw, ch = display.contentArea()
         local list_y = cy + t.header_height + t.vertical_spacing
         local max_visible = get_max_visible()
