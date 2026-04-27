@@ -27,6 +27,91 @@
  */
 static uint8_t phys_to_logical[BTN_COUNT] = {0, 1, 2, 3, 4, 5, 6};
 
+/*
+ * Input event FIFO — accumulates button press events so presses during
+ * blocking e-ink refresh aren't lost. Each press is stored as a logical
+ * button ID. Plugins consume one event at a time via wasPressed().
+ */
+#define INPUT_QUEUE_SIZE 16
+static uint8_t input_queue[INPUT_QUEUE_SIZE];
+static int input_queue_head = 0;
+static int input_queue_tail = 0;
+
+static int input_queue_count(void) {
+    return (input_queue_tail - input_queue_head + INPUT_QUEUE_SIZE) % INPUT_QUEUE_SIZE;
+}
+
+static void input_queue_push(uint8_t logical_btn) {
+    int next = (input_queue_tail + 1) % INPUT_QUEUE_SIZE;
+    if (next == input_queue_head) return;  /* full, drop oldest would be better but keep simple */
+    input_queue[input_queue_tail] = logical_btn;
+    input_queue_tail = next;
+}
+
+static bool input_queue_pop(uint8_t logical_btn) {
+    /* Scan queue for this button, remove first match */
+    int i = input_queue_head;
+    while (i != input_queue_tail) {
+        if (input_queue[i] == logical_btn) {
+            /* Remove by shifting remaining elements */
+            int j = i;
+            while (j != input_queue_tail) {
+                int next = (j + 1) % INPUT_QUEUE_SIZE;
+                if (next == input_queue_tail) break;
+                input_queue[j] = input_queue[next];
+                j = next;
+            }
+            input_queue_tail = (input_queue_tail - 1 + INPUT_QUEUE_SIZE) % INPUT_QUEUE_SIZE;
+            return true;
+        }
+        i = (i + 1) % INPUT_QUEUE_SIZE;
+    }
+    return false;
+}
+
+/**
+ * Scan physical buttons and push any new presses into the event queue.
+ */
+static void scan_to_queue(void) {
+    for (int phys = 0; phys < BTN_COUNT; phys++) {
+        if (hal_gpio_was_pressed((uint8_t)phys)) {
+            input_queue_push(phys_to_logical[phys]);
+        }
+    }
+}
+
+/* Keep public API for any external callers */
+void api_input_scan_to_queue(void) {
+    scan_to_queue();
+}
+
+/*
+ * Background input polling task.
+ * Runs on its own FreeRTOS task, polls buttons every 5ms regardless
+ * of what the main loop is doing (including blocking e-ink refresh).
+ * Pushes press events into the queue for the plugin to consume.
+ */
+static void input_task(void *arg) {
+    (void)arg;
+    while (1) {
+        hal_gpio_poll();
+        scan_to_queue();
+        vTaskDelay(5 / portTICK_PERIOD_MS);
+    }
+}
+
+static TaskHandle_t input_task_handle = NULL;
+
+/**
+ * Start the background input polling task.
+ * Call once during init, after hal_gpio_init().
+ */
+void api_input_start_task(void) {
+    if (input_task_handle) return;
+    xTaskCreate(input_task, "input", 2048, NULL, 2, &input_task_handle);
+    LOG_INF("INPUT", "Background input task started");
+}
+
 /**
  * Check if a logical button is pressed by scanning all physical buttons
  * and checking if any of them map to the requested logical button.
@@ -56,16 +141,22 @@ static int l_input_is_pressed(lua_State *L) {
     return 1;
 }
 
-/* input.wasPressed(button) → bool — checks all physical buttons mapped to this logical */
+/* input.wasPressed(button) → bool — checks queue first, then live state */
 static int l_input_was_pressed(lua_State *L) {
     int btn = (int)lua_tointeger(L, 1);
+    /* Check queued events first (from presses during refresh) */
+    if (input_queue_pop((uint8_t)btn)) {
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+    /* Fall back to live state */
     lua_pushboolean(L, check_logical_pressed(btn, hal_gpio_was_pressed));
     return 1;
 }
 
-/* input.wasAnyPressed() → bool */
+/* input.wasAnyPressed() → bool — checks queue + live state */
 static int l_input_was_any_pressed(lua_State *L) {
-    lua_pushboolean(L, hal_gpio_was_any_pressed());
+    lua_pushboolean(L, input_queue_count() > 0 || hal_gpio_was_any_pressed());
     return 1;
 }
 

@@ -217,8 +217,6 @@ function plugin.loop()
         needs_render = false
         render()
     end
-
-    ui.check_refresh()
 end
 
 function render()
@@ -238,7 +236,7 @@ function render()
         needs_full_refresh = false
         display.refresh(0)
     else
-        ui.request_refresh()
+        display.refresh()
     end
 end
 

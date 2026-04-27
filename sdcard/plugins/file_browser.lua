@@ -141,8 +141,6 @@ function plugin.loop()
         needs_render = false
         render()
     end
-
-    ui.check_refresh()
 end
 
 function render()
@@ -164,7 +162,7 @@ function render()
         ui.draw_button_hints(fonts.ui, buttons.get("browser", display.getOrientation()))
     end
 
-    ui.request_refresh()
+    display.refresh()
 end
 
 function plugin.onExit()

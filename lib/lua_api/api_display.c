@@ -13,6 +13,7 @@
 
 #include "hal_display.h"
 #include "hal_gpio.h"
+#include "api_input.h"
 #include "renderer.h"
 #include "font_manager.h"
 #include "font_render.h"
@@ -31,7 +32,8 @@ static int l_display_clear(lua_State *L) {
 static int l_display_refresh(lua_State *L) {
     int mode = (int)luaL_optinteger(L, 1, 2);
     hal_display_refresh((refresh_mode_t)mode);
-    hal_gpio_poll();  /* capture button state changes during refresh */
+    /* Button polling handled by background input task — presses during
+     * refresh are automatically queued and won't be lost */
     return 0;
 }
 

@@ -14,3 +14,9 @@
 
 /** Register all input.* functions and constants with the Lua state. */
 void api_input_register(lua_State *L);
+
+/** Scan physical buttons and push new presses into the event queue. */
+void api_input_scan_to_queue(void);
+
+/** Start background input polling task (call once after hal_gpio_init). */
+void api_input_start_task(void);

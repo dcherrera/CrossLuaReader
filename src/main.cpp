@@ -23,6 +23,7 @@ extern "C" {
 #include "font_manager.h"
 #include "font_render.h"
 #include "boot_font.h"
+#include "api_input.h"
 #include "plugin_manager.h"
 #include "logging.h"
 }
@@ -48,6 +49,9 @@ void setup() {
         return;
     }
     LOG_INF("MAIN", "Device: %s", hal_gpio_is_x3() ? "X3" : "X4");
+
+    /* Step 3.5: Start background input polling task */
+    api_input_start_task();
 
     /* Step 4: Display */
     if (!hal_display_init()) {
@@ -109,7 +113,7 @@ void setup() {
 static bool power_action_taken = false;
 
 void loop() {
-    hal_gpio_poll();
+    /* Button polling handled by background input task */
 
     /* Power button handling: long-press = reload, short-press = sleep */
     if (hal_gpio_is_pressed(BTN_POWER)) {
