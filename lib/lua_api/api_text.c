@@ -206,17 +206,20 @@ static int wrap_line(int font_id, const char *text, int text_len,
 static char *s_chunk_buf = NULL;
 static char *s_line_buf = NULL;
 static char *s_leftover = NULL;
+static char *s_stripped = NULL;   /* for markdown stripping */
 
 static bool alloc_buffers(void) {
     if (!s_chunk_buf) s_chunk_buf = (char *)malloc(CHUNK_SIZE + 1);
     if (!s_line_buf)  s_line_buf  = (char *)malloc(MAX_LINE_BYTES);
     if (!s_leftover)  s_leftover  = (char *)malloc(MAX_LINE_BYTES);
-    if (!s_chunk_buf || !s_line_buf || !s_leftover) {
+    if (!s_stripped)  s_stripped  = (char *)malloc(MAX_LINE_BYTES);
+    if (!s_chunk_buf || !s_line_buf || !s_leftover || !s_stripped) {
         LOG_ERR("TEXT", "Buffer alloc failed (need %d bytes, free %u)",
                 CHUNK_SIZE + 1 + MAX_LINE_BYTES * 2, hal_system_free_heap());
         free(s_chunk_buf); s_chunk_buf = NULL;
         free(s_line_buf);  s_line_buf  = NULL;
         free(s_leftover);  s_leftover  = NULL;
+        free(s_stripped);  s_stripped  = NULL;
         return false;
     }
     return true;
@@ -226,6 +229,7 @@ static void free_buffers(void) {
     free(s_chunk_buf); s_chunk_buf = NULL;
     free(s_line_buf);  s_line_buf  = NULL;
     free(s_leftover);  s_leftover  = NULL;
+    free(s_stripped);  s_stripped  = NULL;
 }
 
 /* ── text.indexPages ───────────────────────────────────────────── */
@@ -511,12 +515,389 @@ static int l_text_get_page_lines(lua_State *L) {
     return 1;
 }
 
+/* ── Markdown helpers ──────────────────────────────────────────── */
+
+/**
+ * Strip inline markdown syntax for width measurement.
+ * Removes **, *, __, _, `, [text](url) markers.
+ * Returns length of stripped text in dst.
+ */
+static int strip_markdown(const char *src, int src_len, char *dst, int dst_size) {
+    int si = 0, di = 0;
+
+    while (si < src_len && di < dst_size - 1) {
+        /* Code span: `text` */
+        if (src[si] == '`') {
+            si++;
+            while (si < src_len && src[si] != '`' && di < dst_size - 1) {
+                dst[di++] = src[si++];
+            }
+            if (si < src_len) si++;  /* skip closing ` */
+            continue;
+        }
+
+        /* Bold: ** or __ */
+        if (si + 1 < src_len &&
+            ((src[si] == '*' && src[si+1] == '*') ||
+             (src[si] == '_' && src[si+1] == '_'))) {
+            si += 2;
+            continue;
+        }
+
+        /* Italic: * or _ (single, not at word boundary for _ in middle) */
+        if (src[si] == '*' || src[si] == '_') {
+            si++;
+            continue;
+        }
+
+        /* Link: [text](url) — keep text, skip url */
+        if (src[si] == '[') {
+            si++;  /* skip [ */
+            while (si < src_len && src[si] != ']' && di < dst_size - 1) {
+                dst[di++] = src[si++];
+            }
+            if (si < src_len) si++;  /* skip ] */
+            /* Skip (url) if present */
+            if (si < src_len && src[si] == '(') {
+                si++;
+                while (si < src_len && src[si] != ')') si++;
+                if (si < src_len) si++;  /* skip ) */
+            }
+            continue;
+        }
+
+        dst[di++] = src[si++];
+    }
+
+    dst[di] = '\0';
+    return di;
+}
+
+/**
+ * Detect markdown block type from a source line.
+ * Returns: 0=paragraph, 1=h1, 2=h2, 3=h3, 4=code_fence, 5=hr,
+ *          6=list, 7=blockquote, 8=blank
+ * Sets *content_start to index where actual text starts.
+ * Sets *indent to list nesting depth (for lists).
+ */
+static int detect_block_type(const char *line, int len, int *content_start, int *indent) {
+    *content_start = 0;
+    *indent = 0;
+
+    /* Blank line */
+    if (len == 0) return 8;
+    {
+        int i = 0;
+        while (i < len && (line[i] == ' ' || line[i] == '\t')) i++;
+        if (i >= len) return 8;
+    }
+
+    /* Code fence */
+    if (len >= 3 && line[0] == '`' && line[1] == '`' && line[2] == '`') return 4;
+
+    /* HR */
+    if (len >= 3) {
+        int dashes = 0, stars = 0, underscores = 0;
+        for (int i = 0; i < len; i++) {
+            if (line[i] == '-') dashes++;
+            else if (line[i] == '*') stars++;
+            else if (line[i] == '_') underscores++;
+            else if (line[i] != ' ') break;
+        }
+        if (dashes >= 3 || stars >= 3 || underscores >= 3) return 5;
+    }
+
+    /* Headers */
+    if (line[0] == '#') {
+        if (len >= 4 && line[0] == '#' && line[1] == '#' && line[2] == '#' && line[3] == ' ') {
+            *content_start = 4;
+            return 3;
+        }
+        if (len >= 3 && line[0] == '#' && line[1] == '#' && line[2] == ' ') {
+            *content_start = 3;
+            return 2;
+        }
+        if (len >= 2 && line[0] == '#' && line[1] == ' ') {
+            *content_start = 2;
+            return 1;
+        }
+    }
+
+    /* Blockquote */
+    if (line[0] == '>') {
+        *content_start = (len > 1 && line[1] == ' ') ? 2 : 1;
+        return 7;
+    }
+
+    /* List: count leading spaces for indent */
+    {
+        int i = 0;
+        while (i < len && line[i] == ' ') i++;
+        *indent = i / 2;
+
+        if (i < len && (line[i] == '-' || line[i] == '*' || line[i] == '+') &&
+            i + 1 < len && line[i+1] == ' ') {
+            *content_start = i + 2;
+            return 6;
+        }
+        /* Ordered list */
+        if (i < len && line[i] >= '0' && line[i] <= '9') {
+            int j = i;
+            while (j < len && line[j] >= '0' && line[j] <= '9') j++;
+            if (j < len && line[j] == '.' && j + 1 < len && line[j+1] == ' ') {
+                *content_start = j + 2;
+                return 6;
+            }
+        }
+    }
+
+    return 0;  /* paragraph */
+}
+
+/* ── text.indexMarkdownPages ──────────────────────────────────── */
+
+/*
+ * text.indexMarkdownPages(fontId, path, viewportWidth, linesPerPage)
+ *   → page_offsets_table, code_state_table
+ *
+ * Streams markdown file, strips syntax for measurement, word-wraps
+ * with real font metrics. Tracks code block state across pages.
+ */
+static int l_text_index_markdown_pages(lua_State *L) {
+    int font_id = (int)lua_tointeger(L, 1);
+    const char *path = luaL_checkstring(L, 2);
+    int vp_width = (int)lua_tointeger(L, 3);
+    int lines_per_page = (int)lua_tointeger(L, 4);
+
+    if (lines_per_page < 1) lines_per_page = 1;
+    if (vp_width < 10) vp_width = 10;
+
+    if (!font_manager_get(font_id)) {
+        return luaL_error(L, "invalid font id: %d", font_id);
+    }
+
+    if (!alloc_buffers()) {
+        lua_pushnil(L);
+        lua_pushstring(L, "out of memory for text buffers");
+        return 2;
+    }
+
+    hal_file_t f = hal_storage_open(path, HAL_FILE_READ);
+    if (!f) {
+        free_buffers();
+        lua_pushnil(L);
+        lua_pushstring(L, "cannot open file");
+        return 2;
+    }
+
+    size_t file_size = hal_storage_file_size(f);
+
+    int page_cap = 256;
+    uint32_t *pages = (uint32_t *)malloc(page_cap * sizeof(uint32_t));
+    uint8_t *code_states = (uint8_t *)malloc(page_cap);
+    if (!pages || !code_states) {
+        free(pages);
+        free(code_states);
+        hal_storage_file_close(f);
+        free_buffers();
+        lua_pushnil(L);
+        lua_pushstring(L, "out of memory");
+        return 2;
+    }
+
+    int page_count = 0;
+    pages[page_count] = 0;
+    code_states[page_count] = 0;
+    page_count++;
+
+    char *buf = s_chunk_buf;
+    char *leftover = s_leftover;
+    int leftover_len = 0;
+    char *stripped = s_stripped;
+
+    uint32_t file_offset = 0;
+    int display_lines = 0;
+    bool in_code = false;
+
+    while (file_offset < file_size) {
+        int read_len = (int)(file_size - file_offset);
+        if (read_len > CHUNK_SIZE) read_len = CHUNK_SIZE;
+
+        int got = hal_storage_file_read(f, buf, read_len);
+        if (got <= 0) break;
+
+        int safe = utf8_safe_len(buf, got);
+        buf[safe] = '\0';
+
+        const char *p = buf;
+        const char *chunk_end = buf + safe;
+
+        while (p < chunk_end) {
+            const char *nl = (const char *)memchr(p, '\n', chunk_end - p);
+            const char *line;
+            int line_len;
+
+            if (nl) {
+                line_len = (int)(nl - p);
+                if (line_len > 0 && p[line_len - 1] == '\r') line_len--;
+                line = p;
+            } else {
+                int remain = (int)(chunk_end - p);
+                if (remain < MAX_LINE_BYTES) {
+                    memcpy(leftover, p, remain);
+                    leftover_len = remain;
+                }
+                break;
+            }
+
+            /* Build full line with leftover */
+            char *line_buf = s_line_buf;
+            int full_len;
+            if (leftover_len > 0) {
+                full_len = leftover_len + line_len;
+                if (full_len >= MAX_LINE_BYTES) full_len = MAX_LINE_BYTES - 1;
+                memcpy(line_buf, leftover, leftover_len);
+                int copy = full_len - leftover_len;
+                if (copy > 0) memcpy(line_buf + leftover_len, line, copy);
+                line_buf[full_len] = '\0';
+                leftover_len = 0;
+            } else {
+                full_len = line_len < MAX_LINE_BYTES - 1 ? line_len : MAX_LINE_BYTES - 1;
+                memcpy(line_buf, line, full_len);
+                line_buf[full_len] = '\0';
+            }
+
+            /* Detect block type */
+            int content_start = 0, indent = 0;
+            int block_type = detect_block_type(line_buf, full_len, &content_start, &indent);
+
+            /* Handle code fence toggle */
+            if (block_type == 4) {
+                in_code = !in_code;
+                p = nl + 1;
+                continue;
+            }
+
+            /* Count display lines */
+            int block_lines = 0;
+            int avail_w = vp_width;
+
+            if (block_type == 8) {
+                /* blank */
+                block_lines = 1;
+            } else if (block_type == 5) {
+                /* hr */
+                block_lines = 1;
+            } else if (in_code) {
+                /* code block line — no stripping, indent reduces width */
+                block_lines = wrap_line(font_id, line_buf, full_len, vp_width - 16, NULL, NULL);
+            } else {
+                /* Reduce width for indented blocks */
+                if (block_type == 6) avail_w -= (indent + 1) * 20;  /* list */
+                if (block_type == 7) avail_w -= 20;  /* blockquote */
+                if (avail_w < 50) avail_w = 50;
+
+                /* Strip markdown for measurement */
+                const char *content = line_buf + content_start;
+                int content_len = full_len - content_start;
+                int stripped_len = strip_markdown(content, content_len, stripped, MAX_LINE_BYTES);
+                block_lines = wrap_line(font_id, stripped, stripped_len, avail_w, NULL, NULL);
+
+                /* Headers get extra spacing */
+                if (block_type == 1 || block_type == 2) block_lines += 1;
+            }
+
+            display_lines += block_lines;
+
+            p = nl + 1;
+            uint32_t line_file_offset = file_offset + (uint32_t)(p - buf);
+
+            /* Page break */
+            if (display_lines >= lines_per_page) {
+                if (line_file_offset < file_size && page_count < MAX_PAGES) {
+                    if (page_count >= page_cap) {
+                        page_cap *= 2;
+                        uint32_t *np = (uint32_t *)realloc(pages, page_cap * sizeof(uint32_t));
+                        uint8_t *nc = (uint8_t *)realloc(code_states, page_cap);
+                        if (!np || !nc) { free(np ? np : pages); free(nc ? nc : code_states); break; }
+                        pages = np;
+                        code_states = nc;
+                    }
+                    pages[page_count] = line_file_offset;
+                    code_states[page_count] = in_code ? 1 : 0;
+                    page_count++;
+                }
+                display_lines = 0;
+            }
+        }
+
+        file_offset += safe;
+        if (safe < got) hal_storage_file_seek(f, file_offset);
+    }
+
+    hal_storage_file_close(f);
+    free_buffers();
+
+    LOG_INF("TEXT", "MD indexed %d pages for %s (%u bytes)", page_count, path, (unsigned)file_size);
+
+    /* Return two tables: offsets and code states */
+    lua_createtable(L, page_count, 0);
+    for (int i = 0; i < page_count; i++) {
+        lua_pushinteger(L, (lua_Integer)pages[i]);
+        lua_rawseti(L, -2, i + 1);
+    }
+
+    lua_createtable(L, page_count, 0);
+    for (int i = 0; i < page_count; i++) {
+        lua_pushboolean(L, code_states[i]);
+        lua_rawseti(L, -2, i + 1);
+    }
+
+    free(pages);
+    free(code_states);
+    return 2;
+}
+
+/* ── text.wrapString ──────────────────────────────────────────── */
+
+/*
+ * text.wrapString(fontId, str, viewportWidth) → table of strings
+ *
+ * Word-wraps a string with real font measurement.
+ * No file I/O — works on in-memory strings.
+ */
+static int l_text_wrap_string(lua_State *L) {
+    int font_id = (int)lua_tointeger(L, 1);
+    size_t str_len;
+    const char *str = luaL_checklstring(L, 2, &str_len);
+    int vp_width = (int)lua_tointeger(L, 3);
+
+    if (!font_manager_get(font_id)) {
+        return luaL_error(L, "invalid font id: %d", font_id);
+    }
+
+    lua_createtable(L, 4, 0);
+    int table_idx = lua_gettop(L);
+
+    collect_ctx_t ctx;
+    ctx.L = L;
+    ctx.table_idx = table_idx;
+    ctx.count = 0;
+    ctx.max_lines = 1000;  /* no practical limit */
+
+    wrap_line(font_id, str, (int)str_len, vp_width, collect_line, &ctx);
+
+    return 1;
+}
+
 /* ── Registration ──────────────────────────────────────────────── */
 
 void api_text_register(lua_State *L) {
     static const luaL_Reg funcs[] = {
-        {"indexPages",   l_text_index_pages},
-        {"getPageLines", l_text_get_page_lines},
+        {"indexPages",          l_text_index_pages},
+        {"getPageLines",        l_text_get_page_lines},
+        {"indexMarkdownPages",  l_text_index_markdown_pages},
+        {"wrapString",          l_text_wrap_string},
         {NULL, NULL}
     };
     luaL_newlib(L, funcs);

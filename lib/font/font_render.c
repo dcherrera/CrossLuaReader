@@ -101,12 +101,84 @@ static const font_glyph_t *get_glyph_exact(font_data_t *font, const char *font_p
 }
 
 /**
- * Glyph lookup with U+FFFD fallback (no font fallback).
+ * Substitute missing Unicode characters with ASCII equivalents.
+ * Covers box-drawing, typography, and common symbols that many
+ * fonts lack. Returns 0 if no substitution available.
+ */
+static uint32_t substitute_glyph(uint32_t cp) {
+    switch (cp) {
+        /* Box Drawing Light */
+        case 0x2500: return '-';   /* ─ horizontal */
+        case 0x2502: return '|';   /* │ vertical */
+        case 0x250C: return '+';   /* ┌ down and right */
+        case 0x2510: return '+';   /* ┐ down and left */
+        case 0x2514: return '+';   /* └ up and right */
+        case 0x2518: return '+';   /* ┘ up and left */
+        case 0x251C: return '+';   /* ├ vertical and right */
+        case 0x2524: return '+';   /* ┤ vertical and left */
+        case 0x252C: return '+';   /* ┬ horizontal and down */
+        case 0x2534: return '+';   /* ┴ horizontal and up */
+        case 0x253C: return '+';   /* ┼ cross */
+        /* Box Drawing Double */
+        case 0x2550: return '=';   /* ═ */
+        case 0x2551: return '|';   /* ║ */
+        case 0x2552: return '+';   /* ╒ */
+        case 0x2553: return '+';   /* ╓ */
+        case 0x2554: return '+';   /* ╔ */
+        case 0x2555: return '+';   /* ╕ */
+        case 0x2556: return '+';   /* ╖ */
+        case 0x2557: return '+';   /* ╗ */
+        case 0x2558: return '+';   /* ╘ */
+        case 0x2559: return '+';   /* ╙ */
+        case 0x255A: return '+';   /* ╚ */
+        case 0x255B: return '+';   /* ╛ */
+        case 0x255C: return '+';   /* ╜ */
+        case 0x255D: return '+';   /* ╝ */
+        case 0x255E: return '+';   /* ╞ */
+        case 0x255F: return '+';   /* ╟ */
+        case 0x2560: return '+';   /* ╠ */
+        case 0x2561: return '+';   /* ╡ */
+        case 0x2562: return '+';   /* ╢ */
+        case 0x2563: return '+';   /* ╣ */
+        case 0x2564: return '+';   /* ╤ */
+        case 0x2565: return '+';   /* ╥ */
+        case 0x2566: return '+';   /* ╦ */
+        case 0x2567: return '+';   /* ╧ */
+        case 0x2568: return '+';   /* ╨ */
+        case 0x2569: return '+';   /* ╩ */
+        case 0x256A: return '+';   /* ╪ */
+        case 0x256B: return '+';   /* ╫ */
+        case 0x256C: return '+';   /* ╬ */
+        /* Common Typography */
+        case 0x2013: return '-';   /* – en dash */
+        case 0x2014: return '-';   /* — em dash */
+        case 0x2018: return '\'';  /* ' left single quote */
+        case 0x2019: return '\'';  /* ' right single quote */
+        case 0x201C: return '"';   /* " left double quote */
+        case 0x201D: return '"';   /* " right double quote */
+        case 0x2026: return '.';   /* … ellipsis */
+        case 0x2022: return '*';   /* • bullet */
+        case 0x00B7: return '.';   /* · middle dot */
+        default: return 0;
+    }
+}
+
+/**
+ * Glyph lookup with substitution + U+FFFD fallback.
+ * Tries: exact → ASCII substitute → U+FFFD → NULL.
  */
 static const font_glyph_t *get_glyph(font_data_t *font, const char *font_path,
                                        uint32_t cp, uint32_t *out_index) {
     const font_glyph_t *g = get_glyph_exact(font, font_path, cp, out_index);
     if (g) return g;
+
+    /* Try ASCII substitution for missing glyphs */
+    uint32_t sub = substitute_glyph(cp);
+    if (sub) {
+        g = get_glyph_exact(font, font_path, sub, out_index);
+        if (g) return g;
+    }
+
     if (cp != REPLACEMENT_GLYPH) return get_glyph_exact(font, font_path, REPLACEMENT_GLYPH, out_index);
     return NULL;
 }
@@ -141,6 +213,17 @@ static const font_glyph_t *get_glyph_with_fallback(
                 *out_path = fb_path;
                 return g;
             }
+        }
+    }
+
+    /* Try ASCII substitution */
+    uint32_t sub = substitute_glyph(cp);
+    if (sub) {
+        g = get_glyph_exact(primary_font, primary_path, sub, out_index);
+        if (g) {
+            *out_font = primary_font;
+            *out_path = primary_path;
+            return g;
         }
     }
 
