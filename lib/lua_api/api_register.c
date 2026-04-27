@@ -20,6 +20,7 @@
 #include "lauxlib.h"
 
 #include "hal_storage.h"
+#include "hal_system.h"
 #include "logging.h"
 
 #include <stdlib.h>
@@ -43,10 +44,87 @@ static void open_safe_libs(lua_State *L) {
  * Custom package searcher that loads Lua modules from SD card via HAL.
  * Handles require("lib.theme") → loads "/plugins/lib/theme.lua"
  */
+/**
+ * Lua bytecode writer callback for lua_dump().
+ * Writes compiled bytecode to an SD file.
+ */
+static int bytecode_writer(lua_State *L, const void *p, size_t sz, void *ud) {
+    (void)L;
+    hal_file_t f = (hal_file_t)ud;
+    return (hal_storage_file_write(f, p, sz) == (int)sz) ? 0 : 1;
+}
+
+/**
+ * Try to load a cached .luac bytecode file.
+ * Returns true if cache was valid and loaded onto the Lua stack.
+ * Cache is invalid if .lua is newer (different size).
+ */
+static bool load_cached_bytecode(lua_State *L, const char *luac_path,
+                                  const char *lua_path, size_t lua_size) {
+    hal_file_t f = hal_storage_open(luac_path, HAL_FILE_READ);
+    if (!f) return false;
+
+    size_t cache_size = hal_storage_file_size(f);
+
+    /* Read 4-byte header: original .lua file size for invalidation */
+    uint32_t stored_lua_size = 0;
+    if (hal_storage_file_read(f, &stored_lua_size, 4) != 4 ||
+        stored_lua_size != (uint32_t)lua_size) {
+        hal_storage_file_close(f);
+        return false;  /* cache stale */
+    }
+
+    size_t bc_size = cache_size - 4;
+    char *buf = (char *)malloc(bc_size);
+    if (!buf) {
+        hal_storage_file_close(f);
+        return false;
+    }
+
+    int read = hal_storage_file_read(f, buf, bc_size);
+    hal_storage_file_close(f);
+
+    if (read != (int)bc_size) {
+        free(buf);
+        return false;
+    }
+
+    int err = luaL_loadbuffer(L, buf, bc_size, lua_path);
+    free(buf);
+
+    if (err != 0) {
+        lua_pop(L, 1);  /* pop error message */
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * Save compiled bytecode to .luac cache file.
+ * Prepends 4-byte .lua file size for cache invalidation.
+ */
+static void save_bytecode_cache(lua_State *L, const char *luac_path,
+                                 size_t lua_size) {
+    hal_file_t f = hal_storage_open(luac_path, HAL_FILE_WRITE);
+    if (!f) return;
+
+    /* Write .lua file size as invalidation key */
+    uint32_t size32 = (uint32_t)lua_size;
+    hal_storage_file_write(f, &size32, 4);
+
+    /* Dump the compiled chunk (top of Lua stack) */
+    lua_pushvalue(L, -1);  /* copy the chunk */
+    lua_dump(L, bytecode_writer, f, 0);
+    lua_pop(L, 1);  /* pop the copy */
+
+    hal_storage_file_close(f);
+}
+
 static int sd_searcher(lua_State *L) {
     const char *modname = luaL_checkstring(L, 1);
 
-    /* Convert module name dots to path separators: "lib.theme" → "/plugins/lib/theme.lua" */
+    /* Convert module name dots to path separators */
     char modpath[96];
     strncpy(modpath, modname, sizeof(modpath) - 1);
     modpath[sizeof(modpath) - 1] = '\0';
@@ -54,41 +132,62 @@ static int sd_searcher(lua_State *L) {
         if (*p == '.') *p = '/';
     }
 
-    char path[128];
-    snprintf(path, sizeof(path), "/plugins/%s.lua", modpath);
+    char lua_path[128];
+    snprintf(lua_path, sizeof(lua_path), "/plugins/%s.lua", modpath);
 
-    /* Try to load via HAL storage */
-    hal_file_t f = hal_storage_open(path, HAL_FILE_READ);
+    /* Check if .lua file exists */
+    hal_file_t f = hal_storage_open(lua_path, HAL_FILE_READ);
     if (!f) {
-        lua_pushfstring(L, "\n\tno file '%s' on SD", path);
+        lua_pushfstring(L, "\n\tno file '%s' on SD", lua_path);
+        return 1;
+    }
+    size_t lua_size = hal_storage_file_size(f);
+    hal_storage_file_close(f);
+
+    /* Try cached bytecode first */
+    char luac_path[128];
+    snprintf(luac_path, sizeof(luac_path), "/plugins/%s.luac", modpath);
+
+    if (load_cached_bytecode(L, luac_path, lua_path, lua_size)) {
+        LOG_DBG("LUA", "require '%s': cached bytecode", modname);
         return 1;
     }
 
-    size_t size = hal_storage_file_size(f);
-    char *buf = (char *)malloc(size);
+    /* Cache miss — load and compile from source */
+    f = hal_storage_open(lua_path, HAL_FILE_READ);
+    if (!f) {
+        lua_pushfstring(L, "\n\tcannot reopen '%s'", lua_path);
+        return 1;
+    }
+
+    char *buf = (char *)malloc(lua_size);
     if (!buf) {
         hal_storage_file_close(f);
         lua_pushstring(L, "\n\tout of memory");
         return 1;
     }
 
-    int read = hal_storage_file_read(f, buf, size);
+    int read = hal_storage_file_read(f, buf, lua_size);
     hal_storage_file_close(f);
 
-    if (read != (int)size) {
+    if (read != (int)lua_size) {
         free(buf);
-        lua_pushfstring(L, "\n\tread error on '%s'", path);
+        lua_pushfstring(L, "\n\tread error on '%s'", lua_path);
         return 1;
     }
 
-    int err = luaL_loadbuffer(L, buf, size, path);
+    int err = luaL_loadbuffer(L, buf, lua_size, lua_path);
     free(buf);
 
     if (err != 0) {
         return lua_error(L);
     }
 
-    return 1;  /* return the loaded chunk */
+    /* Cache the compiled bytecode for next time */
+    save_bytecode_cache(L, luac_path, lua_size);
+    LOG_INF("LUA", "require '%s': compiled + cached", modname);
+
+    return 1;
 }
 
 /**
@@ -116,16 +215,23 @@ void api_register_all(lua_State *L) {
 }
 
 lua_State *api_create_state(void) {
+    uint32_t h0 = hal_system_free_heap();
+
     lua_State *L = luaL_newstate();
     if (!L) {
         LOG_ERR("LUA", "Failed to create Lua state");
         return NULL;
     }
+    uint32_t h1 = hal_system_free_heap();
 
     open_safe_libs(L);
+    uint32_t h2 = hal_system_free_heap();
+
     install_sd_searcher(L);
     api_register_all(L);
+    uint32_t h3 = hal_system_free_heap();
 
-    LOG_INF("LUA", "Lua state created with CrossLua API");
+    LOG_INF("LUA", "Lua state: bare=%uB, +libs=%uB, +API=%uB (total %uB)",
+            h0 - h1, h1 - h2, h2 - h3, h0 - h3);
     return L;
 }
