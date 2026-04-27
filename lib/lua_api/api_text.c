@@ -15,6 +15,7 @@
 #include "lauxlib.h"
 
 #include "hal_storage.h"
+#include "hal_system.h"
 #include "font_manager.h"
 #include "font_render.h"
 #include "utf8.h"
@@ -23,7 +24,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define CHUNK_SIZE      8192
+#define CHUNK_SIZE      4096
 #define MAX_LINE_BYTES  1024   /* max source line we'll handle */
 #define MAX_PAGES       10000  /* safety limit */
 
@@ -211,6 +212,8 @@ static bool alloc_buffers(void) {
     if (!s_line_buf)  s_line_buf  = (char *)malloc(MAX_LINE_BYTES);
     if (!s_leftover)  s_leftover  = (char *)malloc(MAX_LINE_BYTES);
     if (!s_chunk_buf || !s_line_buf || !s_leftover) {
+        LOG_ERR("TEXT", "Buffer alloc failed (need %d bytes, free %u)",
+                CHUNK_SIZE + 1 + MAX_LINE_BYTES * 2, hal_system_free_heap());
         free(s_chunk_buf); s_chunk_buf = NULL;
         free(s_line_buf);  s_line_buf  = NULL;
         free(s_leftover);  s_leftover  = NULL;

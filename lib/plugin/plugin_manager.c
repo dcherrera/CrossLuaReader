@@ -418,42 +418,11 @@ static void clear_plugin_state(lua_State *L) {
     lua_pushnil(L);
     lua_setglobal(L, "plugin");
 
-    /* Clear lib.* modules from package.loaded so require() re-loads them.
-     * Keep standard libs and package searchers intact.
-     * Must collect keys first — modifying table during lua_next is UB. */
-    lua_getglobal(L, "package");
-    if (lua_istable(L, -1)) {
-        lua_getfield(L, -1, "loaded");
-        if (lua_istable(L, -1)) {
-            /* Pass 1: collect keys to remove (copy strings since
-             * lua_tostring pointers are only valid on the stack) */
-            char to_remove[32][32];
-            int remove_count = 0;
+    /* Keep lib.* modules cached in package.loaded — they're the same
+     * shared modules across all stock plugins. Re-requiring them would
+     * just re-allocate the same tables, causing heap fragmentation. */
 
-            lua_pushnil(L);
-            while (lua_next(L, -2)) {
-                lua_pop(L, 1);  /* pop value */
-                const char *key = lua_tostring(L, -1);
-                if (key && strncmp(key, "lib.", 4) == 0 && remove_count < 32) {
-                    strncpy(to_remove[remove_count], key, 31);
-                    to_remove[remove_count][31] = '\0';
-                    remove_count++;
-                }
-            }
-
-            /* Pass 2: remove collected keys */
-            for (int i = 0; i < remove_count; i++) {
-                lua_pushstring(L, to_remove[i]);
-                lua_pushnil(L);
-                lua_settable(L, -3);
-            }
-        }
-        lua_pop(L, 1);  /* pop loaded */
-    }
-    lua_pop(L, 1);  /* pop package */
-
-    /* Force garbage collection to free old plugin's tables */
-    lua_gc(L, LUA_GCCOLLECT, 0);
+    /* Garbage collect the old plugin's local tables */
     lua_gc(L, LUA_GCCOLLECT, 0);
 }
 
