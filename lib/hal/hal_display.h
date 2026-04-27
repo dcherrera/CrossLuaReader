@@ -41,6 +41,13 @@ void hal_display_clear(uint8_t color);
  */
 void hal_display_refresh(refresh_mode_t mode);
 
+/**
+ * Wait for any in-progress e-ink refresh to complete.
+ * Call before writing new data to the framebuffer if a previous
+ * refresh may still be in progress.
+ */
+void hal_display_wait_busy(void);
+
 /** Enter display deep sleep (low power). */
 void hal_display_deep_sleep(void);
 

@@ -12,6 +12,7 @@ plugin = {
     id = "md_reader",
     type = "reader",
     fileExtensions = {"md"},
+    system = true,
 }
 
 local file_path = nil

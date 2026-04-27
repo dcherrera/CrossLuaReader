@@ -217,6 +217,8 @@ function plugin.loop()
         needs_render = false
         render()
     end
+
+    ui.check_refresh()
 end
 
 function render()
@@ -234,9 +236,9 @@ function render()
 
     if needs_full_refresh then
         needs_full_refresh = false
-        display.refresh(0)  -- full refresh to clear ghosting
+        display.refresh(0)
     else
-        display.refresh()
+        ui.request_refresh()
     end
 end
 

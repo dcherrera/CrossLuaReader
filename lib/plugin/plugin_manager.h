@@ -30,6 +30,7 @@ typedef struct {
     char file_extensions[PLUGIN_EXT_MAX][PLUGIN_EXT_LEN];
     int  ext_count;
     bool valid;
+    bool system;   /**< true = stock plugin, shares Lua state with other stock plugins */
 } plugin_info_t;
 
 /**

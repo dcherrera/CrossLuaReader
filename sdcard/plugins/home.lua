@@ -89,6 +89,8 @@ function plugin.loop()
         needs_render = false
         render()
     end
+
+    ui.check_refresh()
 end
 
 function render()
@@ -105,7 +107,7 @@ function render()
         ui.draw_button_hints(fonts.ui, buttons.get("home", settings.get("orientation", 0)))
     end
 
-    display.refresh()
+    ui.request_refresh()
 end
 
 function plugin.onExit()

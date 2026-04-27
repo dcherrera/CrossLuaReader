@@ -15,6 +15,7 @@ plugin = {
     id = "txt_reader",
     type = "reader",
     fileExtensions = {"txt"},
+    system = true,
 }
 
 local file_path = nil
@@ -107,7 +108,7 @@ local function render()
     end
 
     reader_utils.draw_page_chrome(fonts.ui or fid, current_page, total_pages, title)
-    display.refresh(1)  -- half refresh: good balance of speed and quality
+    reader_utils.do_refresh()
 end
 
 -- ══════════════════════════════════════════════════════════════════

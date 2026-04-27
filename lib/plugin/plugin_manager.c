@@ -198,6 +198,18 @@ static bool parse_plugin_manifest(const char *path, plugin_info_t *info) {
         }
     }
 
+    /* Check system = true flag */
+    const char *sys = strstr(buf, "system");
+    if (sys) {
+        const char *s = sys + 6;
+        while (*s == ' ' || *s == '\t') s++;
+        if (*s == '=') {
+            s++;
+            while (*s == ' ' || *s == '\t') s++;
+            info->system = (strncmp(s, "true", 4) == 0);
+        }
+    }
+
     if (info->id[0] == '\0') {
         LOG_ERR("PLUG", "Plugin in %s has no id", path);
         return false;
@@ -397,19 +409,61 @@ const plugin_info_t *plugin_manager_get_info(int index) {
     return &plugins[index];
 }
 
-bool plugin_manager_start(const char *plugin_id, const char *arg) {
-    /* Stop current plugin if active */
-    if (active_state) {
-        plugin_manager_stop();
-    }
+/**
+ * Clear the plugin global table and loaded module cache from a Lua state.
+ * Prepares the state for loading a new plugin without destroying it.
+ */
+static void clear_plugin_state(lua_State *L) {
+    /* Clear the plugin global */
+    lua_pushnil(L);
+    lua_setglobal(L, "plugin");
 
+    /* Clear lib.* modules from package.loaded so require() re-loads them.
+     * Keep standard libs and package searchers intact.
+     * Must collect keys first — modifying table during lua_next is UB. */
+    lua_getglobal(L, "package");
+    if (lua_istable(L, -1)) {
+        lua_getfield(L, -1, "loaded");
+        if (lua_istable(L, -1)) {
+            /* Pass 1: collect keys to remove (copy strings since
+             * lua_tostring pointers are only valid on the stack) */
+            char to_remove[32][32];
+            int remove_count = 0;
+
+            lua_pushnil(L);
+            while (lua_next(L, -2)) {
+                lua_pop(L, 1);  /* pop value */
+                const char *key = lua_tostring(L, -1);
+                if (key && strncmp(key, "lib.", 4) == 0 && remove_count < 32) {
+                    strncpy(to_remove[remove_count], key, 31);
+                    to_remove[remove_count][31] = '\0';
+                    remove_count++;
+                }
+            }
+
+            /* Pass 2: remove collected keys */
+            for (int i = 0; i < remove_count; i++) {
+                lua_pushstring(L, to_remove[i]);
+                lua_pushnil(L);
+                lua_settable(L, -3);
+            }
+        }
+        lua_pop(L, 1);  /* pop loaded */
+    }
+    lua_pop(L, 1);  /* pop package */
+
+    /* Force garbage collection to free old plugin's tables */
+    lua_gc(L, LUA_GCCOLLECT, 0);
+    lua_gc(L, LUA_GCCOLLECT, 0);
+}
+
+bool plugin_manager_start(const char *plugin_id, const char *arg) {
     /* Resolve plugin ID */
     const char *target_id = plugin_id;
     if (!target_id) {
         target_id = load_saved_state();
     }
     if (!target_id && plugin_count > 0) {
-        /* Find "home" plugin, or use first available */
         int home_idx = find_plugin_by_id("home");
         target_id = (home_idx >= 0) ? "home" : plugins[0].id;
     }
@@ -421,7 +475,6 @@ bool plugin_manager_start(const char *plugin_id, const char *arg) {
     int idx = find_plugin_by_id(target_id);
     if (idx < 0) {
         LOG_ERR("PLUG", "Plugin not found: %s", target_id);
-        /* Fall back to first plugin */
         if (plugin_count > 0) {
             idx = 0;
             target_id = plugins[0].id;
@@ -430,14 +483,53 @@ bool plugin_manager_start(const char *plugin_id, const char *arg) {
         }
     }
 
-    /* Create fresh Lua state */
+    bool target_is_system = plugins[idx].system;
+    bool current_is_system = (active_index >= 0 && active_index < plugin_count)
+                              ? plugins[active_index].system : false;
+
+    /*
+     * Shared state optimization: if both current and target plugins are
+     * system (stock) plugins, reuse the Lua state instead of destroying
+     * and recreating it. This eliminates ~80KB heap churn per switch.
+     */
+    if (active_state && current_is_system && target_is_system) {
+        /* Reuse state: call onExit, clear, reload */
+        call_lifecycle(active_state, "onExit", NULL);
+        sleep_screen_clear_hook();
+
+        LOG_INF("PLUG", "Reusing Lua state for system plugin: %s", target_id);
+        clear_plugin_state(active_state);
+
+        /* Load new plugin into existing state */
+        if (load_lua_file(active_state, plugins[idx].path) != 0) {
+            const char *err = lua_tostring(active_state, -1);
+            LOG_ERR("PLUG", "Load error (shared): %s", err ? err : "?");
+            /* State is corrupted — fall back to fresh state */
+            lua_close(active_state);
+            active_state = NULL;
+            /* Fall through to fresh state creation below */
+        } else {
+            register_nav_functions(active_state);
+            active_index = idx;
+            nav_pending = false;
+            call_lifecycle(active_state, "onEnter", arg);
+            save_state(target_id);
+            LOG_INF("PLUG", "Started (shared): %s", plugins[idx].name);
+            return true;
+        }
+    }
+
+    /* Full state switch: destroy old, create new */
+    if (active_state) {
+        plugin_manager_stop();
+    }
+
     active_state = api_create_state();
     if (!active_state) {
         LOG_ERR("PLUG", "Failed to create Lua state");
         return false;
     }
 
-    /* Load and run the plugin file */
     if (load_lua_file(active_state, plugins[idx].path) != 0) {
         const char *err = lua_tostring(active_state, -1);
         LOG_ERR("PLUG", "Load error: %s", err ? err : "?");
@@ -446,10 +538,7 @@ bool plugin_manager_start(const char *plugin_id, const char *arg) {
         return false;
     }
 
-    /* Register navigation functions */
     register_nav_functions(active_state);
-
-    /* Call onEnter */
     active_index = idx;
     nav_pending = false;
 

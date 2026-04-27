@@ -1,7 +1,1 @@
-plugin slots. 8 seems fine i think. how many are we using for systems plugins? should we go 8 + system?
-
-wy do we need a list? the walpaper should just be pulled from sd. whatever is avaiable and handled inteligently.
-
-why cant we look at the sdk and see if we can make it better?
-
-we have allot of flash left over. can we turn some of it into swap and free up some ram that way?
+Fair concern, but two corrections. The X4's RAM is 380 KB, not 500 KB, so the budget is actually tighter than your number suggests. Also, LuaJIT doesn't have a RISC-V port, so the C3 can't run it (I wish it could, since LuaJIT only needs about 30 KB of RAM). CrossLua uses standard Lua 5.4. The actual measured overhead is \~80-90 KB for the Lua VM itself, leaving \~89 KB of working memory for plugins. That fits because plugins are one at a time (no concurrent state), and bulky data like fonts and EPUB sections stays on SD with LRU caches, never fully resident. The architecture doc has the full memory breakdown.

@@ -11,6 +11,7 @@ plugin = {
     id = "file_browser",
     type = "activity",
     menuEntry = "Browse Files",
+    system = true,
 }
 
 -- font_id replaced by fonts.ui from lib/fonts
@@ -140,6 +141,8 @@ function plugin.loop()
         needs_render = false
         render()
     end
+
+    ui.check_refresh()
 end
 
 function render()
@@ -161,7 +164,7 @@ function render()
         ui.draw_button_hints(fonts.ui, buttons.get("browser", display.getOrientation()))
     end
 
-    display.refresh()
+    ui.request_refresh()
 end
 
 function plugin.onExit()

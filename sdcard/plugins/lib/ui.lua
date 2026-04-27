@@ -4,6 +4,32 @@
 local theme = require("lib.theme")
 local M = {}
 
+-- Deferred refresh: renders to framebuffer immediately but delays
+-- the e-ink refresh until the user stops pressing buttons. Batches
+-- rapid navigation into a single refresh for snappy menus.
+local pending_refresh = false
+local last_input_time = 0
+local REFRESH_DELAY_MS = 120
+
+--- Mark that a refresh is needed (call after drawing to framebuffer).
+function M.request_refresh()
+    pending_refresh = true
+    last_input_time = system.millis()
+end
+
+--- Check if enough time has passed since last input to do the refresh.
+-- Call this every frame in plugin.loop().
+-- @return true if a refresh was performed
+function M.check_refresh()
+    if not pending_refresh then return false end
+    if system.millis() - last_input_time >= REFRESH_DELAY_MS then
+        pending_refresh = false
+        display.refresh(2)
+        return true
+    end
+    return false
+end
+
 --- Check if current language is RTL.
 local function is_rtl()
     local ok, lang = pcall(require, "lib.lang")
