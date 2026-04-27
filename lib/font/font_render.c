@@ -11,6 +11,7 @@
 #include "font_render.h"
 #include "font_manager.h"
 #include "font_cache.h"
+#include "hal_storage.h"
 #include "utf8.h"
 #include "bidi.h"
 #include "renderer.h"
@@ -21,12 +22,61 @@
 /* ── Glyph lookup (binary search on intervals) ──────────────────────── */
 
 /**
- * Exact glyph lookup — binary search only, no U+FFFD fallback.
+ * Read a glyph from the on-demand cache. On cache miss, reads 14 bytes
+ * from SD at the glyph's file offset. LRU eviction.
+ *
+ * @return Pointer to cached glyph, or NULL on read error
+ */
+static const font_glyph_t *cache_get_glyph(font_data_t *font, const char *font_path,
+                                             uint32_t glyph_index) {
+    /* Check cache */
+    int lru_slot = 0;
+    uint32_t lru_tick = UINT32_MAX;
+
+    for (int i = 0; i < GLYPH_CACHE_SIZE; i++) {
+        if (font->glyph_cache[i].valid && font->glyph_cache[i].glyph_index == glyph_index) {
+            font->glyph_cache[i].access_tick = ++font->glyph_cache_tick;
+            return &font->glyph_cache[i].glyph;
+        }
+        if (!font->glyph_cache[i].valid) {
+            lru_slot = i;
+            lru_tick = 0;
+        } else if (font->glyph_cache[i].access_tick < lru_tick) {
+            lru_tick = font->glyph_cache[i].access_tick;
+            lru_slot = i;
+        }
+    }
+
+    /* Cache miss — read from SD */
+    hal_file_t f = hal_storage_open(font_path, HAL_FILE_READ);
+    if (!f) return NULL;
+
+    uint32_t offset = font->glyphs_file_offset + glyph_index * sizeof(font_glyph_t);
+    hal_storage_file_seek(f, offset);
+
+    font_glyph_t g;
+    int read = hal_storage_file_read(f, &g, sizeof(font_glyph_t));
+    hal_storage_file_close(f);
+
+    if (read != sizeof(font_glyph_t)) return NULL;
+
+    /* Store in cache */
+    font->glyph_cache[lru_slot].glyph_index = glyph_index;
+    font->glyph_cache[lru_slot].glyph = g;
+    font->glyph_cache[lru_slot].access_tick = ++font->glyph_cache_tick;
+    font->glyph_cache[lru_slot].valid = true;
+
+    return &font->glyph_cache[lru_slot].glyph;
+}
+
+/**
+ * Exact glyph lookup — binary search on intervals (in RAM), then
+ * on-demand read of glyph metrics from SD via cache.
  *
  * @return Glyph pointer, or NULL if codepoint not in this font
  */
-static const font_glyph_t *get_glyph_exact(const font_data_t *font, uint32_t cp,
-                                             uint32_t *out_index) {
+static const font_glyph_t *get_glyph_exact(font_data_t *font, const char *font_path,
+                                             uint32_t cp, uint32_t *out_index) {
     int lo = 0, hi = (int)font->interval_count;
     while (lo < hi) {
         int mid = (lo + hi) / 2;
@@ -44,7 +94,7 @@ static const font_glyph_t *get_glyph_exact(const font_data_t *font, uint32_t cp,
         uint32_t idx = iv->offset + (cp - iv->first);
         if (idx < font->glyph_count) {
             if (out_index) *out_index = idx;
-            return &font->glyphs[idx];
+            return cache_get_glyph(font, font_path, idx);
         }
     }
     return NULL;
@@ -52,13 +102,12 @@ static const font_glyph_t *get_glyph_exact(const font_data_t *font, uint32_t cp,
 
 /**
  * Glyph lookup with U+FFFD fallback (no font fallback).
- * Used by combining mark lookup and non-fallback draw paths.
  */
-static const font_glyph_t *get_glyph(const font_data_t *font, uint32_t cp,
-                                       uint32_t *out_index) {
-    const font_glyph_t *g = get_glyph_exact(font, cp, out_index);
+static const font_glyph_t *get_glyph(font_data_t *font, const char *font_path,
+                                       uint32_t cp, uint32_t *out_index) {
+    const font_glyph_t *g = get_glyph_exact(font, font_path, cp, out_index);
     if (g) return g;
-    if (cp != REPLACEMENT_GLYPH) return get_glyph_exact(font, REPLACEMENT_GLYPH, out_index);
+    if (cp != REPLACEMENT_GLYPH) return get_glyph_exact(font, font_path, REPLACEMENT_GLYPH, out_index);
     return NULL;
 }
 
@@ -69,12 +118,12 @@ static const font_glyph_t *get_glyph(const font_data_t *font, uint32_t cp,
  */
 static const font_glyph_t *get_glyph_with_fallback(
     int primary_id,
-    const font_data_t *primary_font, const char *primary_path,
+    font_data_t *primary_font, const char *primary_path,
     uint32_t cp, uint32_t *out_index,
-    const font_data_t **out_font, const char **out_path) {
+    font_data_t **out_font, const char **out_path) {
 
     /* Try primary font */
-    const font_glyph_t *g = get_glyph_exact(primary_font, cp, out_index);
+    const font_glyph_t *g = get_glyph_exact(primary_font, primary_path, cp, out_index);
     if (g) {
         *out_font = primary_font;
         *out_path = primary_path;
@@ -86,9 +135,9 @@ static const font_glyph_t *get_glyph_with_fallback(
         const char *fb_path = NULL;
         const font_data_t *fb = font_manager_get_fallback(primary_id, &fb_path);
         if (fb) {
-            g = get_glyph_exact(fb, cp, out_index);
+            g = get_glyph_exact((font_data_t *)fb, fb_path, cp, out_index);
             if (g) {
-                *out_font = fb;
+                *out_font = (font_data_t *)fb;
                 *out_path = fb_path;
                 return g;
             }
@@ -97,7 +146,7 @@ static const font_glyph_t *get_glyph_with_fallback(
 
     /* Last resort: U+FFFD from primary */
     if (cp != REPLACEMENT_GLYPH) {
-        g = get_glyph_exact(primary_font, REPLACEMENT_GLYPH, out_index);
+        g = get_glyph_exact(primary_font, primary_path, REPLACEMENT_GLYPH, out_index);
         if (g) {
             *out_font = primary_font;
             *out_path = primary_path;
@@ -111,7 +160,7 @@ static const font_glyph_t *get_glyph_with_fallback(
 /* ── Kerning (class-based lookup + matrix) ──────────────────────────── */
 
 /**
- * Binary search a kern class table for a codepoint.
+ * Binary search a kern class table (in RAM) for a codepoint.
  *
  * @return Class ID (1-based), or 0 if not found
  */
@@ -137,10 +186,12 @@ static uint8_t lookup_kern_class(const font_kern_class_t *entries, uint16_t coun
 }
 
 /**
- * Get kerning adjustment between two codepoints.
+ * Get kerning adjustment between two codepoints (from RAM).
  * Returns 4.4 fixed-point value.
  */
-static int8_t get_kerning(const font_data_t *font, uint32_t left_cp, uint32_t right_cp) {
+static int8_t get_kerning(const font_data_t *font, const char *font_path,
+                            uint32_t left_cp, uint32_t right_cp) {
+    (void)font_path;
     if (!font->kern_left || !font->kern_right || !font->kern_matrix) return 0;
 
     uint8_t lc = lookup_kern_class(font->kern_left, font->kern_left_entry_count, left_cp);
@@ -155,11 +206,13 @@ static int8_t get_kerning(const font_data_t *font, uint32_t left_cp, uint32_t ri
 /* ── Ligatures (greedy chaining via binary search) ──────────────────── */
 
 /**
- * Look up a ligature pair.
+ * Look up a ligature pair (from RAM).
  *
  * @return Replacement codepoint, or 0 if no ligature
  */
-static uint32_t get_ligature(const font_data_t *font, uint32_t left_cp, uint32_t right_cp) {
+static uint32_t get_ligature(const font_data_t *font, const char *font_path,
+                              uint32_t left_cp, uint32_t right_cp) {
+    (void)font_path;
     if (!font->ligatures || font->ligature_count == 0) return 0;
 
     uint32_t key = (left_cp << 16) | (right_cp & 0xFFFF);
@@ -186,8 +239,9 @@ static uint32_t get_ligature(const font_data_t *font, uint32_t left_cp, uint32_t
  *
  * @return Final codepoint (possibly a ligature replacement)
  */
-static uint32_t apply_ligatures(const font_data_t *font, uint32_t cp,
-                                 const uint8_t **text) {
+static uint32_t apply_ligatures(const font_data_t *font, const char *font_path,
+                                 uint32_t cp, const uint8_t **text) {
+    if (font->ligature_count == 0) return cp;
     while (1) {
         const uint8_t *save = *text;
         uint32_t next = utf8_next_codepoint(text);
@@ -196,11 +250,11 @@ static uint32_t apply_ligatures(const font_data_t *font, uint32_t cp,
             return cp;
         }
 
-        uint32_t lig = get_ligature(font, cp, next);
+        uint32_t lig = get_ligature(font, font_path, cp, next);
         if (lig != 0) {
-            cp = lig;  /* chain: try (ligature, next_next) */
+            cp = lig;
         } else {
-            *text = save;  /* rewind — next char not consumed */
+            *text = save;
             return cp;
         }
     }
@@ -283,6 +337,7 @@ void font_render_draw_text(const font_data_t *font, const char *font_path,
         render_text = visual_buf;
     }
 
+    font_data_t *mfont = (font_data_t *)font;  /* need mutable for cache */
     int cursor_y = y + font->ascender;
     int cursor_x = x;
     int32_t prev_advance_fp = 0;
@@ -295,10 +350,9 @@ void font_render_draw_text(const font_data_t *font, const char *font_path,
     uint32_t cp;
 
     while ((cp = utf8_next_codepoint(&p))) {
-        /* Combining marks: position over base glyph */
         if (utf8_is_combining_mark(cp)) {
             uint32_t mark_idx;
-            const font_glyph_t *mark = get_glyph(font, cp, &mark_idx);
+            const font_glyph_t *mark = get_glyph(mfont, font_path, cp, &mark_idx);
             if (!mark) continue;
             int raise = combining_mark_raise_above(mark->top, mark->height, last_base_top);
             int mark_x = combining_mark_center_over(cursor_x, last_base_left,
@@ -307,17 +361,15 @@ void font_render_draw_text(const font_data_t *font, const char *font_path,
             continue;
         }
 
-        /* Ligature chaining */
-        cp = apply_ligatures(font, cp, &p);
+        cp = apply_ligatures(font, font_path, cp, &p);
 
-        /* Differential rounding: (prev_advance + kern) snapped as one unit */
         if (prev_cp != 0) {
-            int8_t kern = get_kerning(font, prev_cp, cp);
+            int8_t kern = get_kerning(font, font_path, prev_cp, cp);
             cursor_x += fp4_to_pixel(prev_advance_fp + kern);
         }
 
         uint32_t glyph_idx;
-        const font_glyph_t *glyph = get_glyph(font, cp, &glyph_idx);
+        const font_glyph_t *glyph = get_glyph(mfont, font_path, cp, &glyph_idx);
         if (!glyph) {
             prev_cp = cp;
             prev_advance_fp = 0;
@@ -334,9 +386,11 @@ void font_render_draw_text(const font_data_t *font, const char *font_path,
     }
 }
 
-int font_render_get_text_advance(const font_data_t *font, const char *text) {
-    if (!font || !text || !*text) return 0;
+int font_render_get_text_advance(const font_data_t *font, const char *font_path,
+                                  const char *text) {
+    if (!font || !text || !*text || !font_path) return 0;
 
+    font_data_t *mfont = (font_data_t *)font;
     const uint8_t *p = (const uint8_t *)text;
     uint32_t cp, prev_cp = 0;
     int width_px = 0;
@@ -345,15 +399,15 @@ int font_render_get_text_advance(const font_data_t *font, const char *text) {
     while ((cp = utf8_next_codepoint(&p))) {
         if (utf8_is_combining_mark(cp)) continue;
 
-        cp = apply_ligatures(font, cp, &p);
+        cp = apply_ligatures(font, font_path, cp, &p);
 
         if (prev_cp != 0) {
-            int8_t kern = get_kerning(font, prev_cp, cp);
+            int8_t kern = get_kerning(font, font_path, prev_cp, cp);
             width_px += fp4_to_pixel(prev_advance_fp + kern);
         }
 
         uint32_t idx;
-        const font_glyph_t *glyph = get_glyph(font, cp, &idx);
+        const font_glyph_t *glyph = get_glyph(mfont, font_path, cp, &idx);
         prev_advance_fp = glyph ? glyph->advance_x : 0;
         prev_cp = cp;
     }
@@ -362,10 +416,9 @@ int font_render_get_text_advance(const font_data_t *font, const char *text) {
     return width_px;
 }
 
-int font_render_get_text_width(const font_data_t *font, const char *text) {
-    /* For simplicity, use advance width. True bounding box would require
-       tracking min/max glyph extents like EpdFont::getTextBounds. */
-    return font_render_get_text_advance(font, text);
+int font_render_get_text_width(const font_data_t *font, const char *font_path,
+                                const char *text) {
+    return font_render_get_text_advance(font, font_path, text);
 }
 
 int font_render_get_line_height(const font_data_t *font) {
@@ -380,11 +433,10 @@ int font_render_get_ascender(const font_data_t *font) {
 
 void font_render_draw_text_fb(int font_id, int x, int y,
                               const char *text, bool black) {
-    const font_data_t *font = font_manager_get(font_id);
+    font_data_t *font = (font_data_t *)font_manager_get(font_id);
     const char *font_path = font_manager_get_path(font_id);
     if (!font || !text || !*text || !font_path) return;
 
-    /* BiDi reordering */
     char visual_buf[512];
     const char *render_text = text;
     if (bidi_has_rtl(text)) {
@@ -400,17 +452,16 @@ void font_render_draw_text_fb(int font_id, int x, int y,
     int last_base_width = 0;
     int last_base_top = 0;
 
-    const font_data_t *active_font = font;
+    font_data_t *active_font = font;
     const char *active_path = font_path;
 
     const uint8_t *p = (const uint8_t *)render_text;
     uint32_t cp;
 
     while ((cp = utf8_next_codepoint(&p))) {
-        /* Combining marks: use fallback-aware lookup too */
         if (utf8_is_combining_mark(cp)) {
             uint32_t mark_idx;
-            const font_data_t *mark_font;
+            font_data_t *mark_font;
             const char *mark_path;
             const font_glyph_t *mark = get_glyph_with_fallback(
                 font_id, font, font_path, cp, &mark_idx,
@@ -423,12 +474,10 @@ void font_render_draw_text_fb(int font_id, int x, int y,
             continue;
         }
 
-        /* Ligature chaining (primary font only) */
-        cp = apply_ligatures(font, cp, &p);
+        cp = apply_ligatures(font, font_path, cp, &p);
 
-        /* Differential rounding */
         if (prev_cp != 0) {
-            int8_t kern = get_kerning(active_font, prev_cp, cp);
+            int8_t kern = get_kerning(active_font, active_path, prev_cp, cp);
             cursor_x += fp4_to_pixel(prev_advance_fp + kern);
         }
 
@@ -453,24 +502,24 @@ void font_render_draw_text_fb(int font_id, int x, int y,
 }
 
 int font_render_get_advance_fb(int font_id, const char *text) {
-    const font_data_t *font = font_manager_get(font_id);
+    font_data_t *font = (font_data_t *)font_manager_get(font_id);
     const char *font_path = font_manager_get_path(font_id);
-    if (!font || !text || !*text) return 0;
+    if (!font || !text || !*text || !font_path) return 0;
 
     const uint8_t *p = (const uint8_t *)text;
     uint32_t cp, prev_cp = 0;
     int width_px = 0;
     int32_t prev_advance_fp = 0;
-    const font_data_t *active_font = font;
+    font_data_t *active_font = font;
     const char *active_path = font_path;
 
     while ((cp = utf8_next_codepoint(&p))) {
         if (utf8_is_combining_mark(cp)) continue;
 
-        cp = apply_ligatures(font, cp, &p);
+        cp = apply_ligatures(font, font_path, cp, &p);
 
         if (prev_cp != 0) {
-            int8_t kern = get_kerning(active_font, prev_cp, cp);
+            int8_t kern = get_kerning(active_font, active_path, prev_cp, cp);
             width_px += fp4_to_pixel(prev_advance_fp + kern);
         }
 

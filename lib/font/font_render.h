@@ -36,17 +36,19 @@ void font_render_draw_text(const font_data_t *font, const char *font_path,
  * @param text UTF-8 encoded string
  * @return     Advance width in pixels
  */
-int font_render_get_text_advance(const font_data_t *font, const char *text);
+int font_render_get_text_advance(const font_data_t *font, const char *font_path,
+                                  const char *text);
 
 /**
  * Measure text bounding box width.
- * Uses glyph bounding boxes rather than advance widths.
  *
- * @param font Loaded font data
- * @param text UTF-8 encoded string
- * @return     Bounding box width in pixels
+ * @param font      Loaded font data
+ * @param font_path SD path for on-demand reads
+ * @param text      UTF-8 encoded string
+ * @return          Width in pixels
  */
-int font_render_get_text_width(const font_data_t *font, const char *text);
+int font_render_get_text_width(const font_data_t *font, const char *font_path,
+                                const char *text);
 
 /** @return Line height (advance_y) for the font. */
 int font_render_get_line_height(const font_data_t *font);

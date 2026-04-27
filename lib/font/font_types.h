@@ -3,7 +3,7 @@
  * @brief Font data structures, fixed-point helpers, and combining mark
  *        positioning. C equivalents of CrossPoint's EpdFontData.h.
  *
- * @status Complete
+ * @status Phase 8 — on-demand glyph loading
  * @issues None
  * @todo None
  */
@@ -52,6 +52,9 @@ static inline int combining_mark_raise_above(int mark_top, int mark_height,
 #define REPLACEMENT_GLYPH  0xFFFD
 #define FONT_MAX_LOADED    4
 #define FONT_MAX_PATH      64
+
+/** On-demand glyph cache size (number of glyph metrics kept in RAM). */
+#define GLYPH_CACHE_SIZE   96
 
 /** Per-glyph metrics — 14 bytes, packed for binary compatibility. */
 typedef struct __attribute__((packed)) {
@@ -115,15 +118,31 @@ typedef struct {
     uint32_t bitmap_offset;              /**< Absolute file offset to bitmap data */
 } cfont_header_t;
 
-/** Runtime font data — loaded from .cfont, metadata in RAM, bitmaps on SD. */
+/** Cached glyph entry for on-demand loading. */
 typedef struct {
-    font_glyph_t         *glyphs;
+    uint32_t     glyph_index;  /**< Index in the font's glyph array */
+    font_glyph_t glyph;       /**< The glyph metrics */
+    uint32_t     access_tick;  /**< LRU counter */
+    bool         valid;
+} glyph_cache_entry_t;
+
+/** Runtime font data — loaded from .cfont. Intervals, groups, kerning,
+ *  and ligatures are in RAM. Glyph metrics are read on demand from SD. */
+typedef struct {
+    /* Always in RAM */
     font_interval_t      *intervals;
     font_group_t         *groups;
     font_kern_class_t    *kern_left;
     font_kern_class_t    *kern_right;
     int8_t               *kern_matrix;
     font_ligature_t      *ligatures;
+
+    /* On-demand glyph cache */
+    glyph_cache_entry_t  glyph_cache[GLYPH_CACHE_SIZE];
+    uint32_t             glyph_cache_tick;
+
+    /* File offset for on-demand glyph reads */
+    uint32_t glyphs_file_offset;
 
     uint16_t glyph_count;
     uint16_t interval_count;
@@ -140,5 +159,5 @@ typedef struct {
     bool     is_2bit;
 
     uint32_t bitmap_file_offset;  /**< Absolute offset in .cfont file */
-    uint8_t  *metadata_buf;       /**< Single allocation, freed on unload */
+    uint8_t  *metadata_buf;       /**< Allocation for intervals + groups */
 } font_data_t;

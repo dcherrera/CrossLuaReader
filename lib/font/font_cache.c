@@ -202,18 +202,33 @@ static bool decompress_group(int slot_idx, const font_data_t *font,
  * Sums the aligned sizes of all preceding glyphs in the group.
  * Ported from CrossPoint's FontDecompressor::getAlignedOffset.
  */
-static uint32_t get_aligned_offset(const font_data_t *font, uint16_t group_idx,
-                                    uint32_t glyph_index) {
+static uint32_t get_aligned_offset(const font_data_t *font, const char *font_path,
+                                    uint16_t group_idx, uint32_t glyph_index) {
     const font_group_t *grp = &font->groups[group_idx];
     uint32_t offset = 0;
+    uint32_t count = glyph_index - grp->first_glyph_index;
 
-    for (uint32_t i = grp->first_glyph_index; i < glyph_index; i++) {
-        const font_glyph_t *g = &font->glyphs[i];
-        if (g->width > 0 && g->height > 0) {
-            offset += ((g->width + 3) / 4) * g->height;
+    if (count == 0) return 0;
+
+    /* Read preceding glyphs from SD to compute aligned offsets.
+     * Only need width + height (first 2 bytes of each 14-byte glyph). */
+    hal_file_t f = hal_storage_open(font_path, HAL_FILE_READ);
+    if (!f) return 0;
+
+    for (uint32_t i = 0; i < count; i++) {
+        uint32_t idx = grp->first_glyph_index + i;
+        uint32_t file_off = font->glyphs_file_offset + idx * sizeof(font_glyph_t);
+        hal_storage_file_seek(f, file_off);
+
+        uint8_t wh[2];  /* width, height */
+        hal_storage_file_read(f, wh, 2);
+
+        if (wh[0] > 0 && wh[1] > 0) {
+            offset += ((wh[0] + 3) / 4) * wh[1];
         }
     }
 
+    hal_storage_file_close(f);
     return offset;
 }
 
@@ -310,7 +325,7 @@ const uint8_t *font_cache_get_bitmap(const font_data_t *font,
     slots[slot].access_tick = ++tick;
 
     /* Compute byte-aligned offset of this glyph within decompressed group */
-    uint32_t aligned_off = get_aligned_offset(font, (uint16_t)group_idx, glyph_index);
+    uint32_t aligned_off = get_aligned_offset(font, font_path, (uint16_t)group_idx, glyph_index);
     const uint8_t *glyph_src = slots[slot].data + aligned_off;
 
     return compact_glyph(glyph_src, glyph, font->is_2bit);
