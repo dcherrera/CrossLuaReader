@@ -4,7 +4,7 @@
 
 `.cfont` is a self-contained binary font file for CrossLua Reader. It stores font metadata and compressed glyph bitmaps in a format designed for efficient loading on ESP32-C3 (380KB RAM, SD card storage).
 
-Metadata tables are loaded into a single heap allocation. Glyph bitmaps stay on SD and are decompressed on demand via an LRU cache.
+The font loader uses on-demand architecture: only intervals, compression groups, kerning tables, and ligature pairs are loaded into RAM. Glyph metrics (the largest metadata section) and glyph bitmaps stay on SD and are read through LRU caches. This reduces per-font RAM from ~25-31KB to ~2-8KB.
 
 ## File Layout
 

@@ -37,13 +37,7 @@ static lua_State *hook_state = NULL;
 static int hook_ref = LUA_NOREF;
 
 #define WALLPAPER_DIR   "/wallpapers"
-#define MAX_WALLPAPERS  32
-#define WP_NAME_MAX     64
 #define CYCLE_IDX_FILE  "/crosslua_sleep_idx.txt"
-
-static char wp_list[MAX_WALLPAPERS][WP_NAME_MAX];
-static int  wp_count = 0;
-static bool wp_scanned = false;
 
 /* ── Wallpaper directory scan ───────────────────────────────────── */
 
@@ -57,31 +51,51 @@ static bool ends_with_bmp(const char *name) {
             (ext[3] == 'p' || ext[3] == 'P'));
 }
 
-static void scan_wallpapers(void) {
-    if (wp_scanned) return;
-    wp_scanned = true;
-    wp_count = 0;
-
+/**
+ * Count BMP files in /wallpapers/ directory.
+ * Zero static RAM — scans directory on demand.
+ */
+static int count_wallpapers(void) {
     hal_dir_t dir = hal_storage_dir_open(WALLPAPER_DIR);
-    if (!dir) {
-        LOG_INF("SLEEP", "No %s directory", WALLPAPER_DIR);
-        return;
-    }
+    if (!dir) return 0;
 
+    int count = 0;
     char name_buf[128];
     bool is_dir;
     while (hal_storage_dir_next(dir, name_buf, sizeof(name_buf), &is_dir)) {
-        if (is_dir) continue;
-        if (!ends_with_bmp(name_buf)) continue;
-        if (wp_count >= MAX_WALLPAPERS) break;
+        if (!is_dir && ends_with_bmp(name_buf)) count++;
+    }
+    hal_storage_dir_close(dir);
+    return count;
+}
 
-        strncpy(wp_list[wp_count], name_buf, WP_NAME_MAX - 1);
-        wp_list[wp_count][WP_NAME_MAX - 1] = '\0';
-        wp_count++;
+/**
+ * Get the Nth BMP filename from /wallpapers/ (0-based).
+ * Scans directory to the target index. Writes name to out_name.
+ * @return true if found
+ */
+static bool get_wallpaper_at(int target_idx, char *out_name, int name_size) {
+    hal_dir_t dir = hal_storage_dir_open(WALLPAPER_DIR);
+    if (!dir) return false;
+
+    int idx = 0;
+    char name_buf[128];
+    bool is_dir;
+    bool found = false;
+
+    while (hal_storage_dir_next(dir, name_buf, sizeof(name_buf), &is_dir)) {
+        if (is_dir || !ends_with_bmp(name_buf)) continue;
+        if (idx == target_idx) {
+            strncpy(out_name, name_buf, name_size - 1);
+            out_name[name_size - 1] = '\0';
+            found = true;
+            break;
+        }
+        idx++;
     }
 
     hal_storage_dir_close(dir);
-    LOG_INF("SLEEP", "Found %d wallpaper(s)", wp_count);
+    return found;
 }
 
 /* ── Cycle index persistence ────────────────────────────────────── */
@@ -184,28 +198,28 @@ static void render_single(void) {
 }
 
 static void render_cycle(void) {
-    scan_wallpapers();
-    if (wp_count == 0) {
-        render_blank();
-        return;
-    }
+    int count = count_wallpapers();
+    if (count == 0) { render_blank(); return; }
 
-    int idx = read_cycle_index() % wp_count;
-    if (!render_wallpaper(wp_list[idx])) {
+    int idx = read_cycle_index() % count;
+    char name[128];
+    if (get_wallpaper_at(idx, name, sizeof(name))) {
+        if (!render_wallpaper(name)) render_blank();
+    } else {
         render_blank();
     }
-    write_cycle_index((idx + 1) % wp_count);
+    write_cycle_index((idx + 1) % count);
 }
 
 static void render_random(void) {
-    scan_wallpapers();
-    if (wp_count == 0) {
-        render_blank();
-        return;
-    }
+    int count = count_wallpapers();
+    if (count == 0) { render_blank(); return; }
 
-    int idx = (int)(esp_random() % (uint32_t)wp_count);
-    if (!render_wallpaper(wp_list[idx])) {
+    int idx = (int)(esp_random() % (uint32_t)count);
+    char name[128];
+    if (get_wallpaper_at(idx, name, sizeof(name))) {
+        if (!render_wallpaper(name)) render_blank();
+    } else {
         render_blank();
     }
 }

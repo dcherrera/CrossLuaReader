@@ -32,7 +32,11 @@ class EInkDisplay {
   static constexpr uint16_t X3_DISPLAY_HEIGHT = 528;
   static constexpr uint16_t X3_DISPLAY_WIDTH_BYTES = X3_DISPLAY_WIDTH / 8;
   static constexpr uint32_t X3_BUFFER_SIZE = X3_DISPLAY_WIDTH_BYTES * X3_DISPLAY_HEIGHT;
+#ifdef EINK_X4_ONLY
+  static constexpr uint32_t MAX_BUFFER_SIZE = BUFFER_SIZE;  // X4 only: 48000
+#else
   static constexpr uint32_t MAX_BUFFER_SIZE = 52272;  // max(800x480, 792x528) / 8
+#endif
 
   // Runtime dimensions
   uint16_t getDisplayWidth() const { return displayWidth; }

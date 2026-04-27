@@ -97,45 +97,6 @@ static int load_lua_file(lua_State *L, const char *path) {
 /* ── Helpers ────────────────────────────────────────────────────────── */
 
 /**
- * Read a string field from a Lua table on top of stack.
- * Pops nothing, leaves stack unchanged.
- */
-static void read_table_string(lua_State *L, const char *field,
-                               char *buf, int buf_size) {
-    lua_getfield(L, -1, field);
-    if (lua_isstring(L, -1)) {
-        const char *val = lua_tostring(L, -1);
-        strncpy(buf, val, buf_size - 1);
-        buf[buf_size - 1] = '\0';
-    } else {
-        buf[0] = '\0';
-    }
-    lua_pop(L, 1);
-}
-
-/**
- * Read fileExtensions table from plugin table.
- */
-static void read_file_extensions(lua_State *L, plugin_info_t *info) {
-    lua_getfield(L, -1, "fileExtensions");
-    if (lua_istable(L, -1)) {
-        int len = (int)lua_rawlen(L, -1);
-        if (len > PLUGIN_EXT_MAX) len = PLUGIN_EXT_MAX;
-        for (int i = 1; i <= len; i++) {
-            lua_rawgeti(L, -1, i);
-            if (lua_isstring(L, -1)) {
-                const char *ext = lua_tostring(L, -1);
-                strncpy(info->file_extensions[info->ext_count], ext, PLUGIN_EXT_LEN - 1);
-                info->file_extensions[info->ext_count][PLUGIN_EXT_LEN - 1] = '\0';
-                info->ext_count++;
-            }
-            lua_pop(L, 1);
-        }
-    }
-    lua_pop(L, 1);
-}
-
-/**
  * Check if a filename ends with .lua
  */
 static bool ends_with_lua(const char *name) {
@@ -145,38 +106,97 @@ static bool ends_with_lua(const char *name) {
 }
 
 /**
- * Parse a plugin's manifest by running it in a temporary Lua state.
- * Only reads the plugin table — does not keep the state.
+ * Extract a quoted string value for a key from Lua source text.
+ * Looks for: key = "value" or key = 'value'
+ * Writes to out_buf, returns true if found.
+ */
+static bool extract_lua_string(const char *src, const char *key,
+                                char *out_buf, int buf_size) {
+    out_buf[0] = '\0';
+    const char *p = src;
+
+    while ((p = strstr(p, key)) != NULL) {
+        /* Make sure it's not a substring (check char before is whitespace/newline/start) */
+        if (p != src) {
+            char before = *(p - 1);
+            if (before != ' ' && before != '\t' && before != '\n' && before != '\r' && before != ',') {
+                p += strlen(key);
+                continue;
+            }
+        }
+
+        p += strlen(key);
+
+        /* Skip whitespace and '=' */
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p != '=') continue;
+        p++;
+        while (*p == ' ' || *p == '\t') p++;
+
+        /* Read quoted string */
+        char quote = *p;
+        if (quote != '"' && quote != '\'') continue;
+        p++;
+
+        int i = 0;
+        while (*p && *p != quote && i < buf_size - 1) {
+            out_buf[i++] = *p++;
+        }
+        out_buf[i] = '\0';
+        return i > 0;
+    }
+    return false;
+}
+
+/**
+ * Parse a plugin's manifest by reading the first 1KB of the file
+ * and extracting plugin table fields with C string matching.
+ * No Lua state needed — fast and zero heap overhead.
  */
 static bool parse_plugin_manifest(const char *path, plugin_info_t *info) {
     memset(info, 0, sizeof(plugin_info_t));
     strncpy(info->path, path, PLUGIN_PATH_MAX - 1);
 
-    lua_State *L = api_create_state();
-    if (!L) return false;
+    hal_file_t f = hal_storage_open(path, HAL_FILE_READ);
+    if (!f) return false;
 
-    if (load_lua_file(L, path) != 0) {
-        const char *err = lua_tostring(L, -1);
-        LOG_ERR("PLUG", "Parse error in %s: %s", path, err ? err : "?");
-        lua_close(L);
-        return false;
+    /* Read first 1KB — enough for the plugin table */
+    char buf[1024];
+    int n = hal_storage_file_read(f, buf, sizeof(buf) - 1);
+    hal_storage_file_close(f);
+
+    if (n <= 0) return false;
+    buf[n] = '\0';
+
+    /* Check for "plugin" table marker */
+    if (!strstr(buf, "plugin")) return false;
+
+    extract_lua_string(buf, "name", info->name, PLUGIN_NAME_MAX);
+    extract_lua_string(buf, "id", info->id, PLUGIN_ID_MAX);
+    extract_lua_string(buf, "type", info->type, sizeof(info->type));
+    extract_lua_string(buf, "menuEntry", info->menu_entry, PLUGIN_NAME_MAX);
+
+    /* File extensions: look for fileExtensions = { "ext1", "ext2" } */
+    const char *ext_start = strstr(buf, "fileExtensions");
+    if (ext_start) {
+        const char *brace = strchr(ext_start, '{');
+        if (brace) {
+            const char *p = brace + 1;
+            while (*p && *p != '}' && info->ext_count < PLUGIN_EXT_MAX) {
+                /* Find next quoted string */
+                while (*p && *p != '"' && *p != '\'' && *p != '}') p++;
+                if (*p == '}' || !*p) break;
+                char q = *p++;
+                int i = 0;
+                while (*p && *p != q && i < PLUGIN_EXT_LEN - 1) {
+                    info->file_extensions[info->ext_count][i++] = *p++;
+                }
+                info->file_extensions[info->ext_count][i] = '\0';
+                if (i > 0) info->ext_count++;
+                if (*p == q) p++;
+            }
+        }
     }
-
-    /* Read plugin table */
-    lua_getglobal(L, "plugin");
-    if (!lua_istable(L, -1)) {
-        LOG_ERR("PLUG", "No plugin table in %s", path);
-        lua_close(L);
-        return false;
-    }
-
-    read_table_string(L, "name", info->name, PLUGIN_NAME_MAX);
-    read_table_string(L, "id", info->id, PLUGIN_ID_MAX);
-    read_table_string(L, "type", info->type, sizeof(info->type));
-    read_table_string(L, "menuEntry", info->menu_entry, PLUGIN_NAME_MAX);
-    read_file_extensions(L, info);
-
-    lua_close(L);
 
     if (info->id[0] == '\0') {
         LOG_ERR("PLUG", "Plugin in %s has no id", path);

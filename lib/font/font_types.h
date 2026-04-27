@@ -50,11 +50,12 @@ static inline int combining_mark_raise_above(int mark_top, int mark_height,
 /* ── Font data structures (match CrossPoint's binary layout) ────────── */
 
 #define REPLACEMENT_GLYPH  0xFFFD
-#define FONT_MAX_LOADED    4
+#define FONT_MAX_LOADED    3
 #define FONT_MAX_PATH      64
 
-/** On-demand glyph cache size (number of glyph metrics kept in RAM). */
-#define GLYPH_CACHE_SIZE   96
+/** On-demand glyph cache size (number of glyph metrics kept in RAM).
+ *  48 covers a typical screen (~30-40 unique glyphs) with headroom. */
+#define GLYPH_CACHE_SIZE   48
 
 /** Per-glyph metrics — 14 bytes, packed for binary compatibility. */
 typedef struct __attribute__((packed)) {

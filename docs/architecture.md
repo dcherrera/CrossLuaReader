@@ -81,10 +81,10 @@ CrossLuaReader/
 3. hal_gpio_init()          → Button ISRs registered
 4. hal_storage_init()       → SD card mount
 5. hal_power_init()         → Battery ADC, sleep timer
-6. font_loader_init()       → Scan /fonts/, load UI font
-7. lua_init()               → Create Lua state, register API modules
-8. plugin_manager_init()    → Scan /plugins/, parse manifests
-9. plugin_manager_start()   → Load home plugin or restore last state
+6. font_cache_init()        → LRU decompression cache
+7. boot_font_load()         → Load Ubuntu-12 into slot 0 (crash/sleep screens)
+8. plugin_manager_init()    → Scan /plugins/, parse manifests (C-side, no Lua)
+9. plugin_manager_start()   → Create Lua state, load home plugin
 10. main_loop()             → Dispatch loop() to active plugin
 ```
 
@@ -127,6 +127,10 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 | 6 - Settings & persistence | 562KB (8.6%) | 75KB (22.9%) | Settings, fonts, progress, sleep, physical button bar, content area |
 | 7 - Font fallback & language packs | 564KB (8.6%) | 75KB (22.9%) | Per-slot font fallback, language pack discovery, UI translation |
 | 8 - Sleep screen & error recovery | 568KB (8.7%) | 77KB (23.6%) | Boot font, crash screen, BMP wallpapers, SD reload, USB detection |
+| Optimizations | 568KB (8.7%) | 75KB (22.8%) | On-demand glyphs, C-side discovery, 3 font slots, cache 48, X4 framebuffer, zero-alloc wallpapers, no coroutine lib |
+
+**Runtime free heap: 89KB available for plugins** (measured with home plugin active).
+**Plugin discovery: 12ms** (C-side string parsing, no Lua states created).
 
 ### Projected (full runtime with Lua + fonts)
 
@@ -135,17 +139,17 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 | Flash | ~554KB | C runtime + Lua interpreter + plugin manager |
 | DRAM | ~380KB total | |
 | — Arduino/ESP-IDF base | ~68KB | Measured Phase 1 baseline |
-| — Lua state | ~50KB | Interpreter + script state |
-| — Lua stack | ~20KB | Execution stack |
-| — Font cache | ~30KB | LRU decompressed glyph groups |
-| — Framebuffer | 48KB | Single e-ink buffer (inside SDK) |
+| — Lua state | ~80-90KB | Interpreter + libs + script tables |
+| — Boot font metadata | ~8KB | Intervals + kerning (on-demand glyphs) |
+| — Framebuffer | 48KB | Single e-ink buffer (X4-only, inside SDK) |
+| — Font bitmap cache | ~5KB | LRU decompressed glyph groups (3 slots) |
 | — WiFi (when active) | ~50KB | TCP/IP stack |
-| — Available | ~100-150KB | Plugin working memory |
+| — Available | **~89KB** | Plugin working memory (measured) |
 | SD card | 32GB+ | Fonts, plugins, books, cache |
 
 ## Font System
 
-Fonts are stored as `.cfont` binary files on the SD card. The font loader reads them on demand, and the LRU cache keeps recently-used glyph groups decompressed in RAM.
+Fonts are stored as `.cfont` binary files on the SD card. The font system uses on-demand glyph loading: only the binary search index (intervals), compression groups, kerning tables, and ligature pairs are loaded into RAM. Glyph metrics (the largest section — 14 bytes × glyph count) stay on SD and are read through a 48-entry LRU cache per font slot. This reduces per-font RAM from ~25-31KB to ~2-8KB. The bitmap cache separately handles glyph image decompression on demand.
 
 ### Font Fallback
 

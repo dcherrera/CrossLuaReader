@@ -35,7 +35,7 @@ static void open_safe_libs(lua_State *L) {
     luaL_requiref(L, "table", luaopen_table, 1);     lua_pop(L, 1);
     luaL_requiref(L, "math", luaopen_math, 1);       lua_pop(L, 1);
     luaL_requiref(L, "utf8", luaopen_utf8, 1);       lua_pop(L, 1);
-    luaL_requiref(L, "coroutine", luaopen_coroutine, 1); lua_pop(L, 1);
+    /* coroutine lib excluded — saves ~2-3KB per Lua state, unused by plugins */
 }
 
 /**

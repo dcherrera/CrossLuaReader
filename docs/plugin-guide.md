@@ -120,10 +120,12 @@ end
 
 ## Plugin Discovery
 
-The plugin manager scans `/plugins/` on boot (or on SD reload via power long-press):
+The plugin manager scans `/plugins/` on boot (or on SD reload via power long-press). Discovery is done entirely in C by reading the first 1KB of each plugin file and extracting manifest fields with string matching — **no Lua state is created** during discovery, making it fast (~12ms for 3 plugins) and zero heap overhead.
 
 1. **Single-file plugins**: Any `.lua` file directly in `/plugins/` (e.g., `/plugins/my_tool.lua`)
 2. **Folder plugins**: Any subdirectory containing `main.lua` (e.g., `/plugins/my_tool/main.lua`)
+
+Plugins are only loaded into a Lua state when the user navigates to them. Discovery just reads the manifest.
 
 Skipped automatically:
 - `/plugins/lib/` — reserved for shared Lua modules
@@ -132,6 +134,8 @@ Skipped automatically:
 - Non-`.lua` files
 
 Both formats use the same manifest and lifecycle — the only difference is where the entry point file lives.
+
+**Important**: The `plugin = { ... }` table must be in the first 1KB of the file for discovery to find it. Keep the manifest near the top.
 
 ### When to use a folder plugin
 - Your plugin has multiple `.lua` files (helpers, modules, screens)
@@ -395,9 +399,13 @@ Folder plugins are self-contained: all files live in one directory, nothing to c
 ## Tips
 
 ### Memory
-- The device has ~150KB available for plugin data
+- The device has ~89KB free heap available for plugin data
+- The Lua state itself uses ~80-90KB — this is the largest single consumer
+- Fonts use on-demand glyph loading (~2-8KB RAM per font instead of ~25-31KB)
+- Use `{skip_reader = true}` in `fonts.init()` if your plugin only needs the UI font
 - Avoid loading entire files into memory — use `storage.readBytes()` for streaming
 - Release large tables when done: `myTable = nil; collectgarbage()`
+- Check available memory: `system.freeHeap()` returns bytes free
 
 ### Performance
 - E-ink refresh takes 400ms-1.5s — Lua computation is rarely the bottleneck
