@@ -197,11 +197,33 @@ static int wrap_line(int font_id, const char *text, int text_len,
     return lines;
 }
 
-/* ── Shared static buffers (avoids stack overflow on ESP32-C3) ── */
+/*
+ * Buffers allocated on demand — only when text.indexPages or
+ * text.getPageLines is called. Freed immediately after.
+ * Avoids 10KB permanent static BSS cost.
+ */
+static char *s_chunk_buf = NULL;
+static char *s_line_buf = NULL;
+static char *s_leftover = NULL;
 
-static char s_chunk_buf[CHUNK_SIZE + 1];
-static char s_line_buf[MAX_LINE_BYTES];
-static char s_leftover[MAX_LINE_BYTES];
+static bool alloc_buffers(void) {
+    if (!s_chunk_buf) s_chunk_buf = (char *)malloc(CHUNK_SIZE + 1);
+    if (!s_line_buf)  s_line_buf  = (char *)malloc(MAX_LINE_BYTES);
+    if (!s_leftover)  s_leftover  = (char *)malloc(MAX_LINE_BYTES);
+    if (!s_chunk_buf || !s_line_buf || !s_leftover) {
+        free(s_chunk_buf); s_chunk_buf = NULL;
+        free(s_line_buf);  s_line_buf  = NULL;
+        free(s_leftover);  s_leftover  = NULL;
+        return false;
+    }
+    return true;
+}
+
+static void free_buffers(void) {
+    free(s_chunk_buf); s_chunk_buf = NULL;
+    free(s_line_buf);  s_line_buf  = NULL;
+    free(s_leftover);  s_leftover  = NULL;
+}
 
 /* ── text.indexPages ───────────────────────────────────────────── */
 
@@ -225,8 +247,15 @@ static int l_text_index_pages(lua_State *L) {
         return luaL_error(L, "invalid font id: %d", font_id);
     }
 
+    if (!alloc_buffers()) {
+        lua_pushnil(L);
+        lua_pushstring(L, "out of memory for text buffers");
+        return 2;
+    }
+
     hal_file_t f = hal_storage_open(path, HAL_FILE_READ);
     if (!f) {
+        free_buffers();
         lua_pushnil(L);
         lua_pushstring(L, "cannot open file");
         return 2;
@@ -370,6 +399,7 @@ static int l_text_index_pages(lua_State *L) {
     }
 
     free(pages);
+    free_buffers();
     return 1;
 }
 
@@ -410,8 +440,14 @@ static int l_text_get_page_lines(lua_State *L) {
         return luaL_error(L, "invalid font id: %d", font_id);
     }
 
+    if (!alloc_buffers()) {
+        lua_pushnil(L);
+        return 1;
+    }
+
     hal_file_t f = hal_storage_open(path, HAL_FILE_READ);
     if (!f) {
+        free_buffers();
         lua_pushnil(L);
         return 1;
     }
@@ -423,6 +459,7 @@ static int l_text_get_page_lines(lua_State *L) {
     hal_storage_file_close(f);
 
     if (got <= 0) {
+        free_buffers();
         lua_newtable(L);
         return 1;
     }
@@ -467,6 +504,7 @@ static int l_text_get_page_lines(lua_State *L) {
         p = nl ? (nl + 1) : end;
     }
 
+    free_buffers();
     return 1;
 }
 

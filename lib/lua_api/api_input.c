@@ -16,6 +16,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "esp_timer.h"
 
 /*
  * Button remap table: maps physical button → logical button.
@@ -86,30 +87,39 @@ void api_input_scan_to_queue(void) {
 }
 
 /*
- * Background input polling task.
- * Runs on its own FreeRTOS task, polls buttons every 5ms regardless
- * of what the main loop is doing (including blocking e-ink refresh).
- * Pushes press events into the queue for the plugin to consume.
+ * Background input polling via esp_timer.
+ * Fires every 5ms on the system timer task — no dedicated FreeRTOS
+ * task needed, zero heap allocation. Polls buttons and pushes
+ * press events into the queue regardless of main loop state.
  */
-static void input_task(void *arg) {
+static esp_timer_handle_t input_timer = NULL;
+
+static void input_timer_cb(void *arg) {
     (void)arg;
-    while (1) {
-        hal_gpio_poll();
-        scan_to_queue();
-        vTaskDelay(5 / portTICK_PERIOD_MS);
-    }
+    hal_gpio_poll();
+    scan_to_queue();
 }
 
-static TaskHandle_t input_task_handle = NULL;
-
 /**
- * Start the background input polling task.
+ * Start background input polling via hardware timer.
  * Call once during init, after hal_gpio_init().
  */
 void api_input_start_task(void) {
-    if (input_task_handle) return;
-    xTaskCreate(input_task, "input", 2048, NULL, 2, &input_task_handle);
-    LOG_INF("INPUT", "Background input task started");
+    if (input_timer) return;
+
+    esp_timer_create_args_t args = {
+        .callback = input_timer_cb,
+        .arg = NULL,
+        .dispatch_method = ESP_TIMER_TASK,
+        .name = "input_poll",
+    };
+
+    if (esp_timer_create(&args, &input_timer) == ESP_OK) {
+        esp_timer_start_periodic(input_timer, 5000);  /* 5ms = 5000us */
+        LOG_INF("INPUT", "Background input timer started (5ms)");
+    } else {
+        LOG_ERR("INPUT", "Failed to create input timer");
+    }
 }
 
 /**
