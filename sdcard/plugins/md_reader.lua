@@ -30,278 +30,9 @@ local title = ""
 local CHUNK_SIZE = 4096
 local CACHE_MAGIC = "MDRI3"
 
--- ══════════════════════════════════════════════════════════════════
--- MARKDOWN PARSING
--- ══════════════════════════════════════════════════════════════════
-
---- Parse a source line into a block-level element.
-local function parse_block(line, in_code_block)
-    if line:match("^```") then
-        if in_code_block then
-            return {type = "code_end"}, false
-        else
-            return {type = "code_start"}, true
-        end
-    end
-
-    if in_code_block then
-        return {type = "code", text = line}, true
-    end
-
-    if line:match("^%s*$") then
-        return {type = "blank"}, false
-    end
-
-    if line:match("^%-%-%-+%s*$") or line:match("^%*%*%*+%s*$") or line:match("^___+%s*$") then
-        return {type = "hr"}, false
-    end
-
-    local h3 = line:match("^###%s+(.+)")
-    if h3 then return {type = "h3", text = h3}, false end
-
-    local h2 = line:match("^##%s+(.+)")
-    if h2 then return {type = "h2", text = h2}, false end
-
-    local h1 = line:match("^#%s+(.+)")
-    if h1 then return {type = "h1", text = h1}, false end
-
-    local bq = line:match("^>%s?(.*)")
-    if bq then return {type = "blockquote", text = bq}, false end
-
-    local indent, ul = line:match("^(%s*)[%-*+]%s+(.*)")
-    if ul then
-        local depth = math.floor(#indent / 2)
-        return {type = "list", text = ul, indent = depth, ordered = false}, false
-    end
-
-    local oi, num, ol = line:match("^(%s*)(%d+)%.%s+(.*)")
-    if ol then
-        local depth = math.floor(#oi / 2)
-        return {type = "list", text = ol, indent = depth, ordered = true, number = tonumber(num)}, false
-    end
-
-    return {type = "paragraph", text = line}, false
-end
-
---- Strip inline markdown syntax for plain text.
-local function strip_md(text)
-    if not text then return "" end
-    local s = text
-    s = s:gsub("`([^`]*)`", "%1")
-    s = s:gsub("%*%*(.-)%*%*", "%1")
-    s = s:gsub("__(.-)__", "%1")
-    s = s:gsub("%*(.-)%*", "%1")
-    s = s:gsub("_(.-)_", "%1")
-    s = s:gsub("%[(.-)%]%(.-%))", "%1")
-    return s
-end
-
---- Parse inline markdown spans from text.
-local function parse_inline(text)
-    if not text or text == "" then return {{text = "", style = "normal"}} end
-
-    local spans = {}
-    local pos = 1
-    local len = #text
-
-    while pos <= len do
-        if text:sub(pos, pos) == "`" then
-            local close = text:find("`", pos + 1, true)
-            if close then
-                spans[#spans + 1] = {text = text:sub(pos + 1, close - 1), style = "code"}
-                pos = close + 1
-            else
-                spans[#spans + 1] = {text = "`", style = "normal"}
-                pos = pos + 1
-            end
-        elseif text:sub(pos, pos + 1) == "**" then
-            local close = text:find("**", pos + 2, true)
-            if close then
-                spans[#spans + 1] = {text = text:sub(pos + 2, close - 1), style = "bold"}
-                pos = close + 2
-            else
-                spans[#spans + 1] = {text = "*", style = "normal"}
-                pos = pos + 1
-            end
-        elseif text:sub(pos, pos + 1) == "__" then
-            local close = text:find("__", pos + 2, true)
-            if close then
-                spans[#spans + 1] = {text = text:sub(pos + 2, close - 1), style = "bold"}
-                pos = close + 2
-            else
-                spans[#spans + 1] = {text = "_", style = "normal"}
-                pos = pos + 1
-            end
-        elseif text:sub(pos, pos) == "*" and text:sub(pos + 1, pos + 1) ~= "*" then
-            local close = text:find("*", pos + 1, true)
-            if close then
-                spans[#spans + 1] = {text = text:sub(pos + 1, close - 1), style = "italic"}
-                pos = close + 1
-            else
-                spans[#spans + 1] = {text = "*", style = "normal"}
-                pos = pos + 1
-            end
-        elseif text:sub(pos, pos) == "_" and text:sub(pos + 1, pos + 1) ~= "_" then
-            local close = text:find("_", pos + 1, true)
-            if close then
-                spans[#spans + 1] = {text = text:sub(pos + 1, close - 1), style = "italic"}
-                pos = close + 1
-            else
-                spans[#spans + 1] = {text = "_", style = "normal"}
-                pos = pos + 1
-            end
-        elseif text:sub(pos, pos) == "[" then
-            local close_bracket = text:find("]", pos + 1, true)
-            if close_bracket and text:sub(close_bracket + 1, close_bracket + 1) == "(" then
-                local close_paren = text:find(")", close_bracket + 2, true)
-                if close_paren then
-                    spans[#spans + 1] = {text = text:sub(pos + 1, close_bracket - 1), style = "link"}
-                    pos = close_paren + 1
-                else
-                    spans[#spans + 1] = {text = "[", style = "normal"}
-                    pos = pos + 1
-                end
-            else
-                spans[#spans + 1] = {text = "[", style = "normal"}
-                pos = pos + 1
-            end
-        else
-            local next_special = len + 1
-            for _, ch in ipairs({"`", "*", "_", "["}) do
-                local found = text:find(ch, pos + 1, true)
-                if found and found < next_special then
-                    next_special = found
-                end
-            end
-            spans[#spans + 1] = {text = text:sub(pos, next_special - 1), style = "normal"}
-            pos = next_special
-        end
-    end
-
-    return spans
-end
-
--- ══════════════════════════════════════════════════════════════════
--- RENDERING HELPERS
--- ══════════════════════════════════════════════════════════════════
-
---- Render styled spans sequentially.
-local function render_spans(fid, spans, x, y, lh)
-    for _, span in ipairs(spans) do
-        if span.text ~= "" then
-            local w = display.getTextWidth(fid, span.text)
-
-            if span.style == "bold" then
-                display.drawText(fid, x, y, span.text)
-                display.drawText(fid, x + 1, y, span.text)
-            elseif span.style == "italic" then
-                display.drawText(fid, x, y, span.text)
-                display.drawLine(x, y + lh - 2, x + w, y + lh - 2)
-            elseif span.style == "code" then
-                display.drawRect(x - 2, y - 1, w + 4, lh + 2)
-                display.drawText(fid, x, y, span.text)
-            elseif span.style == "link" then
-                display.drawText(fid, x, y, span.text)
-                display.drawLine(x, y + lh - 2, x + w, y + lh - 2)
-            else
-                display.drawText(fid, x, y, span.text)
-            end
-
-            x = x + w
-        end
-    end
-    return x
-end
-
---- Render a text block with inline styling using span-aware wrapping.
--- Parses inline spans from original text, concatenates plain text for
--- C-side word wrap, then walks wrapped lines and spans together.
-local function render_styled_block(fid, original_text, x, y, lh, avail_w, is_header)
-    local lines_drawn = 0
-
-    -- Parse inline spans from original text (with markdown markers)
-    local spans = parse_inline(original_text)
-
-    -- Build plain text from spans for wrapping
-    local plain_parts = {}
-    for _, span in ipairs(spans) do
-        plain_parts[#plain_parts + 1] = span.text
-    end
-    local plain = table.concat(plain_parts)
-
-    -- C-side word wrap on plain text
-    local wrapped = text.wrapString(fid, plain, avail_w)
-    if not wrapped or #wrapped == 0 then
-        wrapped = {""}
-    end
-
-    -- Walk wrapped lines + spans together
-    local span_idx = 1
-    local span_char_offset = 0  -- chars consumed in current span
-
-    for _, wline in ipairs(wrapped) do
-        local chars_remaining = utf8.len(wline) or 0
-        local draw_x = x
-
-        while chars_remaining > 0 and span_idx <= #spans do
-            local span = spans[span_idx]
-            local span_text = span.text
-            local span_total_chars = utf8.len(span_text) or 0
-            local span_chars_left = span_total_chars - span_char_offset
-            local take = math.min(chars_remaining, span_chars_left)
-
-            if take > 0 then
-                -- Extract portion of this span for this line
-                local portion
-                if span_char_offset == 0 and take == span_total_chars then
-                    portion = span_text
-                else
-                    -- UTF-8 aware substring
-                    local byte_start = utf8.offset(span_text, span_char_offset + 1) or 1
-                    local byte_end = utf8.offset(span_text, span_char_offset + take + 1)
-                    if byte_end then
-                        portion = span_text:sub(byte_start, byte_end - 1)
-                    else
-                        portion = span_text:sub(byte_start)
-                    end
-                end
-
-                local pw = display.getTextWidth(fid, portion)
-
-                -- Render with style
-                if is_header or span.style == "bold" then
-                    display.drawText(fid, draw_x, y, portion)
-                    display.drawText(fid, draw_x + 1, y, portion)
-                elseif span.style == "italic" then
-                    display.drawText(fid, draw_x, y, portion)
-                    display.drawLine(draw_x, y + lh - 2, draw_x + pw, y + lh - 2)
-                elseif span.style == "code" then
-                    display.drawRect(draw_x - 2, y - 1, pw + 4, lh + 2)
-                    display.drawText(fid, draw_x, y, portion)
-                elseif span.style == "link" then
-                    display.drawText(fid, draw_x, y, portion)
-                    display.drawLine(draw_x, y + lh - 2, draw_x + pw, y + lh - 2)
-                else
-                    display.drawText(fid, draw_x, y, portion)
-                end
-
-                draw_x = draw_x + pw
-                span_char_offset = span_char_offset + take
-                chars_remaining = chars_remaining - take
-            end
-
-            if span_char_offset >= span_total_chars then
-                span_idx = span_idx + 1
-                span_char_offset = 0
-            end
-        end
-
-        y = y + lh
-        lines_drawn = lines_drawn + 1
-    end
-
-    return lines_drawn, y
-end
+-- All markdown parsing (block detection, inline spans, stripping,
+-- word wrapping) is handled in C by text.renderMarkdownPage().
+-- The Lua side only handles layout and drawing.
 
 -- ══════════════════════════════════════════════════════════════════
 -- PAGE INDEX CACHE
@@ -356,129 +87,124 @@ end
 -- PAGE RENDERING
 -- ══════════════════════════════════════════════════════════════════
 
+-- Style constants (match C side)
+local STYLE_NORMAL = 0
+local STYLE_BOLD   = 1
+local STYLE_ITALIC = 2
+local STYLE_CODE   = 3
+local STYLE_LINK   = 4
+
 local function render()
     if total_pages == 0 then return end
 
     local offset = page_offsets[current_page] or 0
     local in_code = page_code_state[current_page] or false
-    local read_len = math.min(CHUNK_SIZE, file_size - offset)
-    local chunk = storage.readBytes(file_path, offset, read_len)
-
-    if not chunk or #chunk == 0 then return end
-
-    local safe_len = text_layout.utf8_safe_length(chunk, #chunk)
-    chunk = chunk:sub(1, safe_len)
 
     display.clear()
 
     local fid = fonts.reader or fonts.ui
     local lh = viewport.line_height
     local y = viewport.y
-    local lines_drawn = 0
+    local bq_start_y = nil  -- track blockquote start for border
 
-    local pos = 1
-    while pos <= #chunk and lines_drawn < viewport.lines_per_page do
-        local nl = chunk:find("\n", pos, true)
-        local line
-        if nl then
-            line = chunk:sub(pos, nl - 1):gsub("\r$", "")
-            pos = nl + 1
-        else
-            line = chunk:sub(pos)
-            pos = #chunk + 1
-        end
+    -- C does all the heavy lifting: parse, strip, wrap, span.
+    -- We just draw.
+    text.renderMarkdownPage(fid, file_path, offset,
+        viewport.w, viewport.lines_per_page, in_code,
+        function(block_type, line_text, spans, indent)
 
-        local block
-        block, in_code = parse_block(line, in_code)
+            local x = viewport.x
 
-        if block.type == "blank" then
-            y = y + lh
-            lines_drawn = lines_drawn + 1
-
-        elseif block.type == "hr" then
-            display.drawLine(viewport.x, y + lh / 2, viewport.x + viewport.w, y + lh / 2)
-            y = y + lh
-            lines_drawn = lines_drawn + 1
-
-        elseif block.type == "code_start" or block.type == "code_end" then
-            -- no visual output
-
-        elseif block.type == "code" then
-            -- Code block: indent + left border, NO gray fill
-            display.drawLine(viewport.x + 2, y, viewport.x + 2, y + lh)
-            display.drawLine(viewport.x + 3, y, viewport.x + 3, y + lh)
-            display.drawText(fid, viewport.x + 12, y, block.text)
-            y = y + lh
-            lines_drawn = lines_drawn + 1
-
-        elseif block.type == "h1" or block.type == "h2" or block.type == "h3" then
-            -- Extra spacing before headers
-            if lines_drawn > 0 and (block.type == "h1" or block.type == "h2") then
-                y = y + lh / 2
-                lines_drawn = lines_drawn + 1
-                if lines_drawn >= viewport.lines_per_page then break end
+            if block_type == "blank" then
+                -- End blockquote border if we were in one
+                if bq_start_y then
+                    display.drawLine(viewport.x + 4, bq_start_y, viewport.x + 4, y)
+                    display.drawLine(viewport.x + 5, bq_start_y, viewport.x + 5, y)
+                    bq_start_y = nil
+                end
+                y = y + lh
+                return
             end
 
-            local drawn, new_y = render_styled_block(fid, block.text, viewport.x, y, lh, viewport.w, true)
-            lines_drawn = lines_drawn + drawn
-            y = new_y
-
-            -- Underline for h1/h2
-            if block.type == "h1" or block.type == "h2" then
-                display.drawLine(viewport.x, y - 2, viewport.x + viewport.w, y - 2)
+            if block_type == "hr" then
+                if bq_start_y then
+                    display.drawLine(viewport.x + 4, bq_start_y, viewport.x + 4, y)
+                    display.drawLine(viewport.x + 5, bq_start_y, viewport.x + 5, y)
+                    bq_start_y = nil
+                end
+                display.drawLine(viewport.x, y + lh / 2, viewport.x + viewport.w, y + lh / 2)
+                y = y + lh
+                return
             end
 
-        elseif block.type == "blockquote" then
-            local bq_x = viewport.x + 16
-            local bq_w = viewport.w - 20
-            local start_y = y
+            -- End blockquote border when block type changes
+            if block_type ~= "blockquote" and bq_start_y then
+                display.drawLine(viewport.x + 4, bq_start_y, viewport.x + 4, y)
+                display.drawLine(viewport.x + 5, bq_start_y, viewport.x + 5, y)
+                bq_start_y = nil
+            end
 
-            local drawn, new_y = render_styled_block(fid, block.text, bq_x, y, lh, bq_w, false)
-
-            -- Left border for all blockquote lines
-            display.drawLine(viewport.x + 4, start_y, viewport.x + 4, new_y)
-            display.drawLine(viewport.x + 5, start_y, viewport.x + 5, new_y)
-
-            lines_drawn = lines_drawn + drawn
-            y = new_y
-
-        elseif block.type == "list" then
-            local indent_px = (block.indent + 1) * 20
-            local list_x = viewport.x + indent_px
-            local list_w = viewport.w - indent_px
-
-            -- Bullet on first line
-            if block.ordered and block.number then
-                display.drawText(fid, viewport.x + indent_px - 16, y, block.number .. ".")
-            else
+            -- Adjust x for indented blocks
+            if block_type == "code_fence" then
+                -- Code block: left border + indent
+                display.drawLine(viewport.x + 2, y, viewport.x + 2, y + lh)
+                display.drawLine(viewport.x + 3, y, viewport.x + 3, y + lh)
+                x = viewport.x + 16
+            elseif block_type == "blockquote" then
+                if not bq_start_y then bq_start_y = y end
+                x = viewport.x + 16
+            elseif block_type == "list" then
+                local indent_px = (indent + 1) * 20
+                -- Draw bullet on first wrapped line of list item
                 display.fillRect(viewport.x + indent_px - 10, y + lh / 2 - 2, 4, 4)
+                x = viewport.x + indent_px
             end
 
-            local drawn, new_y = render_styled_block(fid, block.text, list_x, y, lh, list_w, false)
-            lines_drawn = lines_drawn + drawn
-            y = new_y
+            -- Render spans
+            local draw_x = x
+            for _, span in ipairs(spans) do
+                local s = span.style
+                local t = span.text
+                if t and t ~= "" then
+                    local w = display.getTextWidth(fid, t)
 
-        else -- paragraph
-            local px = viewport.x
-            local pw = viewport.w
+                    if block_type == "h1" or block_type == "h2" or block_type == "h3" or s == STYLE_BOLD then
+                        display.drawText(fid, draw_x, y, t)
+                        display.drawText(fid, draw_x + 1, y, t)
+                    elseif s == STYLE_ITALIC then
+                        display.drawText(fid, draw_x, y, t)
+                        display.drawLine(draw_x, y + lh - 2, draw_x + w, y + lh - 2)
+                    elseif s == STYLE_CODE then
+                        display.drawRect(draw_x - 2, y - 1, w + 4, lh + 2)
+                        display.drawText(fid, draw_x, y, t)
+                    elseif s == STYLE_LINK then
+                        display.drawText(fid, draw_x, y, t)
+                        display.drawLine(draw_x, y + lh - 2, draw_x + w, y + lh - 2)
+                    else
+                        display.drawText(fid, draw_x, y, t)
+                    end
 
-            if is_rtl then
-                -- Right-align for RTL
-                local stripped = strip_md(block.text or "")
-                local tw = display.getTextWidth(fid, stripped)
-                if tw < pw then
-                    px = viewport.x + pw - tw
+                    draw_x = draw_x + w
                 end
             end
 
-            local drawn, new_y = render_styled_block(fid, block.text or "", px, y, lh, pw, false)
-            lines_drawn = lines_drawn + drawn
-            y = new_y
+            -- Header underline
+            if block_type == "h1" or block_type == "h2" then
+                display.drawLine(viewport.x, y + lh - 1, viewport.x + viewport.w, y + lh - 1)
+            end
+
+            y = y + lh
         end
+    )
+
+    -- Close any remaining blockquote border
+    if bq_start_y then
+        display.drawLine(viewport.x + 4, bq_start_y, viewport.x + 4, y)
+        display.drawLine(viewport.x + 5, bq_start_y, viewport.x + 5, y)
     end
 
     reader_utils.draw_page_chrome(fonts.ui or fid, current_page, total_pages, title)
-    display.refresh(1)  -- half refresh for clean page turns
+    display.refresh(1)
 end
 
 -- ══════════════════════════════════════════════════════════════════

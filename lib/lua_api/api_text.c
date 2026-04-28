@@ -80,6 +80,16 @@ typedef void (*line_callback_t)(const char *line, int len, void *ctx);
  * @param ctx        Context for callback
  * @return           Number of wrapped display lines
  */
+/**
+ * Word wrap using CrossPoint's approach: measure actual substring width,
+ * not accumulated individual word widths. More accurate with kerning.
+ *
+ * Algorithm:
+ * 1. Check if full line fits → output as-is
+ * 2. If too wide, find last space that keeps text within viewport
+ * 3. If no space, break at UTF-8 character boundary
+ * 4. Repeat for remaining text
+ */
 static int wrap_line(int font_id, const char *text, int text_len,
                      int vp_width, line_callback_t cb, void *ctx) {
     if (text_len == 0) {
@@ -87,112 +97,97 @@ static int wrap_line(int font_id, const char *text, int text_len,
         return 1;
     }
 
-    const font_data_t *font = font_manager_get(font_id);
-    const char *font_path = font_manager_get_path(font_id);
-    if (!font || !font_path) {
+    if (!font_manager_get(font_id) || !font_manager_get_path(font_id)) {
+        LOG_ERR("TEXT", "wrap_line: font %d not loaded!", font_id);
         if (cb) cb(text, text_len, ctx);
         return 1;
     }
 
-    /* Measure space width once */
-    int space_w = font_render_get_advance_fb(font_id, " ");
     int lines = 0;
+    const char *remaining = text;
+    int remaining_len = text_len;
 
-    const char *p = text;
-    const char *end = text + text_len;
+    /* Reusable buffer for measuring substrings */
+    char measure_buf[MAX_LINE_BYTES];
 
-    /* Current line tracking */
-    const char *line_start = p;
-    int line_w = 0;
-    bool has_content = false;
+    while (remaining_len > 0) {
+        /* Measure the full remaining text */
+        int copy = remaining_len < MAX_LINE_BYTES - 1 ? remaining_len : MAX_LINE_BYTES - 1;
+        memcpy(measure_buf, remaining, copy);
+        measure_buf[copy] = '\0';
 
-    while (p < end) {
-        /* Find next word */
-        const char *word_start = p;
+        int full_w = font_render_get_advance_fb(font_id, measure_buf);
 
-        /* Skip leading spaces */
-        while (p < end && *p == ' ') p++;
-        if (p >= end && !has_content) {
-            /* Trailing spaces only */
+        if (full_w <= vp_width) {
+            /* Entire remaining text fits on one line */
+            /* Trim trailing spaces */
+            int trim = copy;
+            while (trim > 0 && remaining[trim - 1] == ' ') trim--;
+            if (cb) cb(remaining, trim, ctx);
+            lines++;
             break;
         }
-        if (p > word_start && has_content) {
-            /* There were spaces — they act as potential break points */
-        }
 
-        /* Scan word */
-        const char *ws = p;
-        while (p < end && *p != ' ') {
-            p += utf8_char_len((uint8_t)*p);
-            if (p > end) p = end;
-        }
-        int word_len = (int)(p - ws);
-        if (word_len == 0) continue;
+        /* Text too wide — find break point.
+         * Search for the last space where text before it fits. */
+        int break_pos = copy;
+        int last_space = -1;
 
-        /* Measure the word */
-        char word_buf[MAX_LINE_BYTES];
-        int copy_len = word_len < MAX_LINE_BYTES - 1 ? word_len : MAX_LINE_BYTES - 1;
-        memcpy(word_buf, ws, copy_len);
-        word_buf[copy_len] = '\0';
-
-        int word_w = font_render_get_advance_fb(font_id, word_buf);
-
-        /* Would this word fit on the current line? */
-        int needed = has_content ? (space_w + word_w) : word_w;
-
-        if (has_content && line_w + needed > vp_width) {
-            /* Flush current line */
-            int flush_len = (int)(ws - line_start);
-            /* Trim trailing spaces */
-            while (flush_len > 0 && line_start[flush_len - 1] == ' ') flush_len--;
-
-            if (cb) cb(line_start, flush_len, ctx);
-            lines++;
-
-            line_start = ws;
-            line_w = word_w;
-            has_content = true;
-
-            /* Single word wider than viewport — break it */
-            if (word_w > vp_width) {
-                const char *wp = ws;
-                const char *wp_end = ws + word_len;
-                const char *break_start = wp;
-                int bw = 0;
-
-                while (wp < wp_end) {
-                    int clen = utf8_char_len((uint8_t)*wp);
-                    char ch_buf[8];
-                    int cl = clen < 7 ? clen : 7;
-                    memcpy(ch_buf, wp, cl);
-                    ch_buf[cl] = '\0';
-                    int ch_w = font_render_get_advance_fb(font_id, ch_buf);
-
-                    if (bw + ch_w > vp_width && wp > break_start) {
-                        if (cb) cb(break_start, (int)(wp - break_start), ctx);
-                        lines++;
-                        break_start = wp;
-                        bw = 0;
-                    }
-                    bw += ch_w;
-                    wp += clen;
+        /* Scan for spaces and find the rightmost one that fits */
+        for (int i = 0; i < copy; i++) {
+            if (remaining[i] == ' ') {
+                /* Measure text up to this space */
+                memcpy(measure_buf, remaining, i);
+                measure_buf[i] = '\0';
+                int w = font_render_get_advance_fb(font_id, measure_buf);
+                if (w <= vp_width) {
+                    last_space = i;
+                } else {
+                    break;  /* past the limit, use last good space */
                 }
-                /* Remainder becomes the new current line */
-                line_start = break_start;
-                line_w = bw;
             }
-        } else {
-            line_w += needed;
-            has_content = true;
         }
-    }
 
-    /* Flush remaining */
-    if (has_content || line_start == text) {
-        int flush_len = (int)(end - line_start);
-        while (flush_len > 0 && line_start[flush_len - 1] == ' ') flush_len--;
-        if (cb) cb(line_start, flush_len, ctx);
+        if (last_space > 0) {
+            /* Break at the last space that fits */
+            break_pos = last_space;
+        } else {
+            /* No space found — break at character boundary */
+            /* Binary search: find how many chars fit */
+            break_pos = 0;
+            int i = 0;
+            while (i < copy) {
+                int clen = utf8_char_len((uint8_t)remaining[i]);
+                int next = i + clen;
+                if (next > copy) break;
+
+                memcpy(measure_buf, remaining, next);
+                measure_buf[next] = '\0';
+                int w = font_render_get_advance_fb(font_id, measure_buf);
+                if (w > vp_width) break;
+
+                break_pos = next;
+                i = next;
+            }
+            if (break_pos == 0 && copy > 0) {
+                /* At least one character */
+                break_pos = utf8_char_len((uint8_t)remaining[0]);
+            }
+        }
+
+        /* Output the line up to break point */
+        int out_len = break_pos;
+        while (out_len > 0 && remaining[out_len - 1] == ' ') out_len--;
+        if (cb) cb(remaining, out_len, ctx);
         lines++;
+
+        /* Skip past break point + any trailing space */
+        remaining += break_pos;
+        remaining_len -= break_pos;
+        while (remaining_len > 0 && *remaining == ' ') {
+            remaining++;
+            remaining_len--;
+        }
     }
 
     return lines;
@@ -767,12 +762,8 @@ static int l_text_index_markdown_pages(lua_State *L) {
                 line_buf[full_len] = '\0';
             }
 
-            /* Detect block type */
-            int content_start = 0, indent = 0;
-            int block_type = detect_block_type(line_buf, full_len, &content_start, &indent);
-
-            /* Handle code fence toggle */
-            if (block_type == 4) {
+            /* Check code fence toggle first */
+            if (full_len >= 3 && line_buf[0] == '`' && line_buf[1] == '`' && line_buf[2] == '`') {
                 in_code = !in_code;
                 p = nl + 1;
                 continue;
@@ -782,15 +773,21 @@ static int l_text_index_markdown_pages(lua_State *L) {
             int block_lines = 0;
             int avail_w = vp_width;
 
+            if (in_code) {
+                /* code block line — no block detection, no stripping */
+                block_lines = wrap_line(font_id, line_buf, full_len, vp_width - 16, NULL, NULL);
+            } else {
+
+            /* Detect block type (only outside code blocks) */
+            int content_start = 0, indent = 0;
+            int block_type = detect_block_type(line_buf, full_len, &content_start, &indent);
+
             if (block_type == 8) {
                 /* blank */
                 block_lines = 1;
             } else if (block_type == 5) {
                 /* hr */
                 block_lines = 1;
-            } else if (in_code) {
-                /* code block line — no stripping, indent reduces width */
-                block_lines = wrap_line(font_id, line_buf, full_len, vp_width - 16, NULL, NULL);
             } else {
                 /* Reduce width for indented blocks */
                 if (block_type == 6) avail_w -= (indent + 1) * 20;  /* list */
@@ -806,6 +803,7 @@ static int l_text_index_markdown_pages(lua_State *L) {
                 /* Headers get extra spacing */
                 if (block_type == 1 || block_type == 2) block_lines += 1;
             }
+            } /* end non-code block */
 
             display_lines += block_lines;
 
@@ -890,6 +888,400 @@ static int l_text_wrap_string(lua_State *L) {
     return 1;
 }
 
+/* ── Inline span parser ────────────────────────────────────────── */
+
+/* Style IDs matching Lua side */
+#define STYLE_NORMAL  0
+#define STYLE_BOLD    1
+#define STYLE_ITALIC  2
+#define STYLE_CODE    3
+#define STYLE_LINK    4
+
+typedef struct {
+    const char *text;
+    int         len;
+    int         style;
+} span_t;
+
+#define MAX_SPANS 64
+
+/**
+ * Parse inline markdown spans from a line.
+ * Produces an array of span_t with text pointers into src.
+ * Returns number of spans.
+ */
+static int parse_inline_spans(const char *src, int src_len,
+                               span_t *spans, int max_spans) {
+    int count = 0;
+    int i = 0;
+
+    while (i < src_len && count < max_spans) {
+        /* Code: `text` */
+        if (src[i] == '`') {
+            int close = i + 1;
+            while (close < src_len && src[close] != '`') close++;
+            if (close < src_len) {
+                spans[count].text = src + i + 1;
+                spans[count].len = close - i - 1;
+                spans[count].style = STYLE_CODE;
+                count++;
+                i = close + 1;
+                continue;
+            }
+        }
+
+        /* Bold: ** */
+        if (i + 1 < src_len && src[i] == '*' && src[i+1] == '*') {
+            int close = i + 2;
+            while (close + 1 < src_len && !(src[close] == '*' && src[close+1] == '*')) close++;
+            if (close + 1 < src_len) {
+                spans[count].text = src + i + 2;
+                spans[count].len = close - i - 2;
+                spans[count].style = STYLE_BOLD;
+                count++;
+                i = close + 2;
+                continue;
+            }
+        }
+
+        /* Bold: __ */
+        if (i + 1 < src_len && src[i] == '_' && src[i+1] == '_') {
+            int close = i + 2;
+            while (close + 1 < src_len && !(src[close] == '_' && src[close+1] == '_')) close++;
+            if (close + 1 < src_len) {
+                spans[count].text = src + i + 2;
+                spans[count].len = close - i - 2;
+                spans[count].style = STYLE_BOLD;
+                count++;
+                i = close + 2;
+                continue;
+            }
+        }
+
+        /* Italic: * (single) */
+        if (src[i] == '*' && (i + 1 >= src_len || src[i+1] != '*')) {
+            int close = i + 1;
+            while (close < src_len && src[close] != '*') close++;
+            if (close < src_len) {
+                spans[count].text = src + i + 1;
+                spans[count].len = close - i - 1;
+                spans[count].style = STYLE_ITALIC;
+                count++;
+                i = close + 1;
+                continue;
+            }
+        }
+
+        /* Italic: _ (single) */
+        if (src[i] == '_' && (i + 1 >= src_len || src[i+1] != '_')) {
+            int close = i + 1;
+            while (close < src_len && src[close] != '_') close++;
+            if (close < src_len) {
+                spans[count].text = src + i + 1;
+                spans[count].len = close - i - 1;
+                spans[count].style = STYLE_ITALIC;
+                count++;
+                i = close + 1;
+                continue;
+            }
+        }
+
+        /* Link: [text](url) — keep text only */
+        if (src[i] == '[') {
+            int cb = i + 1;
+            while (cb < src_len && src[cb] != ']') cb++;
+            if (cb < src_len && cb + 1 < src_len && src[cb+1] == '(') {
+                int cp = cb + 2;
+                while (cp < src_len && src[cp] != ')') cp++;
+                if (cp < src_len) {
+                    spans[count].text = src + i + 1;
+                    spans[count].len = cb - i - 1;
+                    spans[count].style = STYLE_LINK;
+                    count++;
+                    i = cp + 1;
+                    continue;
+                }
+            }
+        }
+
+        /* Normal text: collect until next special char */
+        int start = i;
+        i++;
+        while (i < src_len && src[i] != '`' && src[i] != '*' &&
+               src[i] != '_' && src[i] != '[') {
+            i++;
+        }
+        spans[count].text = src + start;
+        spans[count].len = i - start;
+        spans[count].style = STYLE_NORMAL;
+        count++;
+    }
+
+    return count;
+}
+
+/* ── text.renderMarkdownPage helpers ───────────────────────────── */
+
+/* Collected wrapped lines for one source line (before calling Lua).
+ * A single source line rarely wraps to more than 8 display lines.
+ * Each line is max 128 chars (viewport is ~60 chars wide at size 14). */
+#define MAX_WRAPPED_LINES 8
+#define MAX_WRAPPED_LEN   256
+typedef struct {
+    char   lines[MAX_WRAPPED_LINES][MAX_WRAPPED_LEN];
+    int    lens[MAX_WRAPPED_LINES];
+    int    count;
+} wrapped_block_t;
+
+static wrapped_block_t s_wrapped;
+
+static void collect_wrapped(const char *line, int len, void *ctx) {
+    (void)ctx;
+    if (s_wrapped.count >= MAX_WRAPPED_LINES) return;
+    int copy = len < MAX_WRAPPED_LEN - 1 ? len : MAX_WRAPPED_LEN - 1;
+    memcpy(s_wrapped.lines[s_wrapped.count], line, copy);
+    s_wrapped.lines[s_wrapped.count][copy] = '\0';
+    s_wrapped.lens[s_wrapped.count] = copy;
+    s_wrapped.count++;
+}
+
+static const char *type_names[] = {
+    "paragraph", "h1", "h2", "h3", "code_fence", "hr",
+    "list", "blockquote", "blank"
+};
+
+/**
+ * Call Lua callback for one wrapped line with parsed spans.
+ * Called AFTER wrap_line returns (not inside it) to avoid deep stack.
+ */
+static void emit_to_lua(lua_State *L, int cb_ref, int block_type,
+                          const char *line, int len, int indent, bool is_code) {
+    lua_rawgeti(L, LUA_REGISTRYINDEX, cb_ref);
+
+    /* Arg 1: block type */
+    int bt = is_code ? 4 : block_type;
+    lua_pushstring(L, (bt >= 0 && bt <= 8) ? type_names[bt] : "paragraph");
+
+    /* Arg 2: line text */
+    lua_pushlstring(L, line, len);
+
+    /* Arg 3: spans table */
+    span_t line_spans[MAX_SPANS];
+    int ls_count;
+
+    if (is_code) {
+        line_spans[0].text = line;
+        line_spans[0].len = len;
+        line_spans[0].style = STYLE_CODE;
+        ls_count = 1;
+    } else {
+        ls_count = parse_inline_spans(line, len, line_spans, MAX_SPANS);
+    }
+
+    lua_createtable(L, ls_count, 0);
+    for (int i = 0; i < ls_count; i++) {
+        lua_createtable(L, 0, 2);
+        lua_pushlstring(L, line_spans[i].text, line_spans[i].len);
+        lua_setfield(L, -2, "text");
+        lua_pushinteger(L, line_spans[i].style);
+        lua_setfield(L, -2, "style");
+        lua_rawseti(L, -2, i + 1);
+    }
+
+    /* Arg 4: indent */
+    lua_pushinteger(L, indent);
+
+    if (lua_pcall(L, 4, 0, 0) != 0) {
+        const char *err = lua_tostring(L, -1);
+        LOG_ERR("TEXT", "MD render cb: %s", err ? err : "?");
+        lua_pop(L, 1);
+    }
+}
+
+/*
+ * text.renderMarkdownPage(fontId, path, offset, viewportWidth,
+ *                          linesPerPage, inCodeBlock, callback)
+ *
+ * Reads one page of markdown, parses blocks, strips and wraps text
+ * with real font metrics, calls callback per wrapped line with
+ * block type and styled spans. Zero intermediate tables.
+ *
+ * Callback: function(block_type, line_text, spans, indent)
+ *   block_type: string
+ *   line_text: string (plain wrapped text)
+ *   spans: table of {text=string, style=int}
+ *   indent: int
+ *
+ * Returns: bool (true if was in code block at end of page)
+ */
+static int l_text_render_markdown_page(lua_State *L) {
+    int font_id = (int)lua_tointeger(L, 1);
+    const char *path = luaL_checkstring(L, 2);
+    uint32_t offset = (uint32_t)lua_tointeger(L, 3);
+    int vp_width = (int)lua_tointeger(L, 4);
+    int lines_per_page = (int)lua_tointeger(L, 5);
+    bool in_code = lua_toboolean(L, 6);
+    luaL_checktype(L, 7, LUA_TFUNCTION);
+
+    if (!font_manager_get(font_id)) {
+        return luaL_error(L, "invalid font id: %d", font_id);
+    }
+
+    if (!alloc_buffers()) {
+        lua_pushboolean(L, in_code);
+        return 1;
+    }
+
+    /* Store callback in registry */
+    lua_pushvalue(L, 7);
+    int cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+    hal_file_t f = hal_storage_open(path, HAL_FILE_READ);
+    if (!f) {
+        luaL_unref(L, LUA_REGISTRYINDEX, cb_ref);
+        free_buffers();
+        lua_pushboolean(L, in_code);
+        return 1;
+    }
+
+    size_t file_size = hal_storage_file_size(f);
+    hal_storage_file_seek(f, offset);
+
+    int read_len = (int)(file_size - offset);
+    if (read_len > CHUNK_SIZE) read_len = CHUNK_SIZE;
+
+    char *buf = s_chunk_buf;
+    int got = hal_storage_file_read(f, buf, read_len);
+    hal_storage_file_close(f);
+
+    if (got <= 0) {
+        luaL_unref(L, LUA_REGISTRYINDEX, cb_ref);
+        free_buffers();
+        lua_pushboolean(L, in_code);
+        return 1;
+    }
+
+    int safe = utf8_safe_len(buf, got);
+    buf[safe] = '\0';
+
+    int lines_emitted = 0;
+    bool is_code = in_code;
+
+    char *stripped = s_stripped;
+    char *line_buf = s_line_buf;
+
+    const char *p = buf;
+    const char *end = buf + safe;
+
+    while (p < end && lines_emitted < lines_per_page) {
+        /* Extract one source line */
+        const char *nl = (const char *)memchr(p, '\n', end - p);
+        int line_len;
+        if (nl) {
+            line_len = (int)(nl - p);
+            if (line_len > 0 && p[line_len - 1] == '\r') line_len--;
+        } else {
+            line_len = (int)(end - p);
+        }
+        if (line_len >= MAX_LINE_BYTES) line_len = MAX_LINE_BYTES - 1;
+        memcpy(line_buf, p, line_len);
+        line_buf[line_len] = '\0';
+
+        /* Check for code fence toggle first */
+        if (line_len >= 3 && line_buf[0] == '`' && line_buf[1] == '`' && line_buf[2] == '`') {
+            is_code = !is_code;
+            p = nl ? (nl + 1) : end;
+            continue;
+        }
+
+        /* Inside code block: skip block detection, use raw line */
+        if (is_code) {
+            int avail_w_code = vp_width - 16;
+            if (avail_w_code < 50) avail_w_code = 50;
+
+            s_wrapped.count = 0;
+            wrap_line(font_id, line_buf, line_len, avail_w_code, collect_wrapped, NULL);
+
+            for (int i = 0; i < s_wrapped.count && lines_emitted < lines_per_page; i++) {
+                emit_to_lua(L, cb_ref, 4, /* code_fence type */
+                            s_wrapped.lines[i], s_wrapped.lens[i],
+                            0, true);
+                lines_emitted++;
+            }
+
+            p = nl ? (nl + 1) : end;
+            continue;
+        }
+
+        /* Detect block type (only for non-code lines) */
+        int content_start = 0, indent = 0;
+        int block_type = detect_block_type(line_buf, line_len, &content_start, &indent);
+
+        /* Blank line */
+        if (block_type == 8) {
+            emit_to_lua(L, cb_ref, 8, "", 0, 0, false);
+            lines_emitted++;
+            p = nl ? (nl + 1) : end;
+            continue;
+        }
+
+        /* HR */
+        if (block_type == 5) {
+            emit_to_lua(L, cb_ref, 5, "", 0, 0, false);
+            lines_emitted++;
+            p = nl ? (nl + 1) : end;
+            continue;
+        }
+
+        /* Header extra spacing */
+        if ((block_type == 1 || block_type == 2) && lines_emitted > 0) {
+            emit_to_lua(L, cb_ref, 8, "", 0, 0, false);
+            lines_emitted++;
+            if (lines_emitted >= lines_per_page) break;
+        }
+
+        /* Get content text */
+        const char *content = line_buf + content_start;
+        int content_len = line_len - content_start;
+
+        /* Calculate available width */
+        int avail_w = vp_width;
+        if (block_type == 6) avail_w -= (indent + 1) * 20;
+        if (block_type == 7) avail_w -= 20;
+        if (is_code) avail_w -= 16;
+        if (avail_w < 50) avail_w = 50;
+
+        /* Word wrap into static buffer (NOT into Lua callback) */
+        s_wrapped.count = 0;
+        if (is_code) {
+            wrap_line(font_id, content, content_len, avail_w, collect_wrapped, NULL);
+        } else {
+            int stripped_len = strip_markdown(content, content_len, stripped, MAX_LINE_BYTES);
+            wrap_line(font_id, stripped, stripped_len, avail_w, collect_wrapped, NULL);
+        }
+        if (s_wrapped.count > 1) {
+            LOG_INF("TEXT", "Wrapped %d lines (type=%d, len=%d, w=%d)",
+                    s_wrapped.count, block_type, content_len, avail_w);
+        }
+
+        /* Now call Lua for each wrapped line (stack is clean here) */
+        for (int i = 0; i < s_wrapped.count && lines_emitted < lines_per_page; i++) {
+            emit_to_lua(L, cb_ref, block_type,
+                        s_wrapped.lines[i], s_wrapped.lens[i],
+                        indent, is_code);
+            lines_emitted++;
+        }
+
+        p = nl ? (nl + 1) : end;
+    }
+
+    luaL_unref(L, LUA_REGISTRYINDEX, cb_ref);
+    free_buffers();
+
+    lua_pushboolean(L, is_code);
+    return 1;
+}
+
 /* ── Registration ──────────────────────────────────────────────── */
 
 void api_text_register(lua_State *L) {
@@ -898,6 +1290,7 @@ void api_text_register(lua_State *L) {
         {"getPageLines",        l_text_get_page_lines},
         {"indexMarkdownPages",  l_text_index_markdown_pages},
         {"wrapString",          l_text_wrap_string},
+        {"renderMarkdownPage",  l_text_render_markdown_page},
         {NULL, NULL}
     };
     luaL_newlib(L, funcs);
