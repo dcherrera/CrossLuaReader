@@ -6,26 +6,26 @@ The layout engine is a foundational C-side system that owns all display area cal
 
 See `docs/layout-engine-spec.md` for the full specification.
 
-## Phase 1: Core Engine
+## Phase 1: Core Engine ✅
 
 Build the layout engine C module and Lua bindings. No integration with existing code yet — just the engine itself, testable in isolation.
 
-- [ ] Create `lib/layout/layout_engine.h` — public API with `layout_state_t` struct (fields ordered largest-to-smallest per coding standards), all setter/getter declarations
-- [ ] Create `lib/layout/layout_engine.c` — singleton state, `layout_init()` reads physical display dimensions from HAL, `layout_recalculate()` computes all derived values
+- [x] Create `lib/layout/layout_engine.h` — public API with `layout_state_t` struct (fields ordered largest-to-smallest per coding standards), all setter/getter declarations
+- [x] Create `lib/layout/layout_engine.c` — singleton state, `layout_init()` reads physical display dimensions from HAL, `layout_recalculate()` computes all derived values
   - Setters: `layout_set_header_height()`, `layout_set_footer_height()`, `layout_set_margins()`, `layout_set_line_spacing()`, `layout_set_line_height()`, `layout_set_font()`, `layout_set_orientation()`
   - Getters: `layout_lines_per_page()`, `layout_line_height()`, `layout_header_area()`, `layout_body_area()`, `layout_body_area_raw()`, `layout_footer_area()`
   - All setters call `layout_recalculate()` internally
-  - Use `uint16_t`/`int16_t` for pixel values (max 800px fits in 16 bits)
+  - Use `int16_t` for pixel values (max 800 fits in 16 bits)
   - Validate inputs: clamp negatives to 0, clamp heights to display bounds
-  - Zero heap allocation — single static struct
-- [ ] Create `lib/lua_api/api_layout.h` — declare `api_layout_register()`
-- [ ] Create `lib/lua_api/api_layout.c` — Lua bindings for all setters/getters, register as `layout.*` global
-- [ ] Register in `api_register.c` — add `#include "api_layout.h"` and `api_layout_register(L)` call
-- [ ] Call `layout_init()` in `main.cpp` setup after `renderer_init()`
-- [ ] Build passes: `pio run` compiles with no errors
-- [ ] Test: Lua plugin can call `layout.setHeaderHeight(84)`, `layout.setFooterHeight(40)`, `layout.setMargin(10)`, `layout.linesPerPage()` and get sane values
-- [ ] **Document**: Update `docs/lua-api.md` with `layout.*` API reference
-- [ ] **Update plan**: Check off completed tasks
+  - Zero heap allocation — single static struct (~74 bytes)
+- [x] Create `lib/lua_api/api_layout.h` — declare `api_layout_register()`
+- [x] Create `lib/lua_api/api_layout.c` — Lua bindings for all setters/getters, register as `layout.*` global
+- [x] Register in `api_register.c` — add `#include "api_layout.h"` and `api_layout_register(L)` call
+- [x] Call `layout_init()` in `main.cpp` setup after `renderer_init()`
+- [x] Build passes: RAM 23.5% (77KB), Flash 8.8% (579KB)
+- [x] Test: Lua plugin calls `layout.setHeaderHeight(84)`, `layout.setFooterHeight(40)`, `layout.setMargin(10)`, `layout.setFont(0)` → lpp=22, lh=29, body=13,97,448,650 ✓
+- [x] **Document**: Updated `docs/lua-api.md` with full `layout.*` API reference
+- [x] **Update plan**: Completed
 
 ## Phase 2: Text API Integration
 

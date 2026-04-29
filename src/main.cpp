@@ -23,6 +23,7 @@ extern "C" {
 #include "font_manager.h"
 #include "font_render.h"
 #include "boot_font.h"
+#include "layout_engine.h"
 #include "api_input.h"
 #include "plugin_manager.h"
 #include "logging.h"
@@ -72,6 +73,9 @@ void setup() {
         LOG_ERR("MAIN", "Renderer init failed");
         return;
     }
+
+    /* Step 7.5: Layout engine */
+    layout_init();
 
     /* Step 8: Font cache */
     font_cache_init();

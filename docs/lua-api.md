@@ -307,6 +307,81 @@ font.unload(reader)
 
 ---
 
+## layout
+
+Centralized display layout engine. Divides the screen into three non-overlapping regions — Header, Body, Footer — and provides authoritative bounds and line metrics. C-side computation, Lua-side configuration.
+
+### Configuration (triggers recalculate)
+
+### layout.setHeaderHeight(height)
+Set header region height in pixels. `0` = hidden (body extends to top). Default `0`.
+
+### layout.setFooterHeight(height)
+Set footer region height in pixels. `0` = hidden (body extends to bottom). Default `40`.
+
+### layout.setMargins(top, right, bottom, left)
+Set body margins in pixels. Content is inset from the body region edges.
+
+### layout.setMargin(value)
+Set uniform margin on all sides.
+
+### layout.setLineSpacing(pixels)
+Set extra pixels between lines. Default `0`.
+
+### layout.setLineHeight(pixels)
+Manually set line height. Overrides font-derived value. `0` = derive from font.
+
+### layout.setFont(fontId)
+Derive line height from a loaded font's advance_y metric. Recalculates `linesPerPage`.
+
+### layout.setOrientation(n)
+Set orientation (`0`-`3`). Recalculates all regions for new display dimensions.
+
+### Queries (read-only, authoritative)
+
+### layout.linesPerPage() → int
+How many uniform text lines fit in the body area. **Single source of truth** — indexer and renderer both use this.
+
+### layout.lineHeight() → int
+Effective line height: `line_height + line_spacing`.
+
+### layout.headerArea() → x, y, w, h
+Header region bounds. All zero if header height is 0.
+
+### layout.bodyArea() → x, y, w, h
+Body region bounds with margins applied. Use for text content positioning.
+
+### layout.bodyAreaRaw() → x, y, w, h
+Body region bounds without margins. Use for free drawing (backgrounds, borders).
+
+### layout.footerArea() → x, y, w, h
+Footer region bounds. All zero if footer height is 0.
+
+### layout.bodyWidth() → int
+Convenience: body width with margins.
+
+### layout.bodyHeight() → int
+Convenience: body height with margins.
+
+**Example:**
+```lua
+-- Reader setup
+layout.setHeaderHeight(0)
+layout.setFooterHeight(40)
+layout.setMargin(10)
+layout.setFont(fonts.reader)
+system.log("Lines per page: " .. layout.linesPerPage())
+
+-- App setup
+layout.setHeaderHeight(84)
+layout.setFooterHeight(40)
+layout.setMargin(20)
+local bx, by, bw, bh = layout.bodyArea()
+-- Draw menu items within bx, by, bw, bh
+```
+
+---
+
 ## text
 
 C-side text indexing and page layout. Streams files from SD in 8KB chunks — never loads the full file. Word wrapping uses font measurement directly in C for maximum speed.

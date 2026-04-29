@@ -14,6 +14,7 @@
 #include "api_system.h"
 #include "api_font.h"
 #include "api_text.h"
+#include "api_layout.h"
 
 #include "lua.h"
 #include "lualib.h"
@@ -212,6 +213,7 @@ void api_register_all(lua_State *L) {
     api_system_register(L);
     api_font_register(L);
     api_text_register(L);
+    api_layout_register(L);
 }
 
 lua_State *api_create_state(void) {
