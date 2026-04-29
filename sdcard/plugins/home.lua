@@ -48,7 +48,7 @@ function plugin.onEnter()
     local t = theme.get()
     layout.setHeaderHeight(t.header_height)
     layout.setFooterHeight(t.button_hints_height)
-    layout.setMargin(0)  -- UI plugins use theme.side_padding, not layout margins
+    layout.setMargin(0)
 
     -- Build menu with translated labels
     menu_items = {

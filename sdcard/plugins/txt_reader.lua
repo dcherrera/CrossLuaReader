@@ -143,6 +143,7 @@ function plugin.onEnter(path)
     -- Configure layout engine for reader mode
     layout.setHeaderHeight(0)
     layout.setFooterHeight(40)
+    layout.setButtonBar(0)  -- no button hints in reader
     layout.setMargin(settings.get("screenMargin", 10))
     layout.setFont(fonts.reader or fonts.ui)
 

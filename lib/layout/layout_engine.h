@@ -33,6 +33,7 @@ typedef struct {
     int16_t line_spacing;     /**< Extra pixels between lines. Default 0. */
     int16_t line_height;      /**< Pixels per text line. 0 = derive from font. */
     int16_t font_id;          /**< Font to derive line_height from. -1 = none. */
+    int16_t button_bar;       /**< Physical button bar height. 48 = UI, 0 = reader. */
 
     /* Computed — read-only, recalculated automatically */
     int16_t header_x, header_y, header_w, header_h;
@@ -55,6 +56,12 @@ typedef struct {
 void layout_init(void);
 
 /**
+ * Reset configurable values to defaults. Called by plugin manager
+ * before each plugin's onEnter() so every plugin starts clean.
+ */
+void layout_reset_defaults(void);
+
+/**
  * Recalculate all computed values from current configurable state.
  * Called automatically by all setters — rarely needed directly.
  */
@@ -67,6 +74,12 @@ void layout_set_footer_height(int16_t height);
 void layout_set_margins(int16_t top, int16_t right, int16_t bottom, int16_t left);
 void layout_set_line_spacing(int16_t spacing);
 void layout_set_line_height(int16_t height);
+
+/**
+ * Reserve space for the physical button bar in landscape modes.
+ * @param height 48 for UI plugins (button hints visible), 0 for readers.
+ */
+void layout_set_button_bar(int16_t height);
 
 /**
  * Set the font used to derive line_height.

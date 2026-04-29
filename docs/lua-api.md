@@ -50,15 +50,6 @@ Set the screen orientation. `0` = portrait, `1` = landscape CW, `2` = inverted, 
 ### display.getOrientation() → int
 Returns the current orientation (0-3).
 
-### display.contentArea() → x, y, w, h
-Returns the usable content area bounds, excluding the physical button bar zone. The button bar occupies 40px at the physical bottom of the device, which maps to different logical edges depending on orientation:
-- Portrait: bottom edge → content height reduced
-- Landscape CW: left edge → content x offset increased
-- Inverted: top edge → content y offset increased
-- Landscape CCW: right edge → content width reduced
-
-Use this for all content rendering to prevent overlap with button hints.
-
 ### display.width() → int
 Logical screen width for current orientation.
 

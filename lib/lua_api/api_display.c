@@ -215,17 +215,6 @@ static int l_display_draw_text_physical(lua_State *L) {
     return 0;
 }
 
-/* display.contentArea() → x, y, w, h — usable content area excluding button bar */
-static int l_display_content_area(lua_State *L) {
-    int x, y, w, h;
-    renderer_get_content_area(&x, &y, &w, &h);
-    lua_pushinteger(L, x);
-    lua_pushinteger(L, y);
-    lua_pushinteger(L, w);
-    lua_pushinteger(L, h);
-    return 4;
-}
-
 void api_display_register(lua_State *L) {
     static const luaL_Reg funcs[] = {
         {"clear",          l_display_clear},
@@ -247,7 +236,6 @@ void api_display_register(lua_State *L) {
         {"drawLinePhysical",     l_display_draw_line_physical},
         {"drawRectPhysical",     l_display_draw_rect_physical},
         {"drawTextPhysical",     l_display_draw_text_physical},
-        {"contentArea",          l_display_content_area},
         {NULL, NULL}
     };
     luaL_newlib(L, funcs);

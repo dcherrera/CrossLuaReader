@@ -41,6 +41,12 @@ static int l_layout_set_margin(lua_State *L) {
     return 0;
 }
 
+/* layout.setButtonBar(height) — 48 for UI plugins, 0 for readers */
+static int l_layout_set_button_bar(lua_State *L) {
+    layout_set_button_bar((int16_t)lua_tointeger(L, 1));
+    return 0;
+}
+
 static int l_layout_set_line_spacing(lua_State *L) {
     layout_set_line_spacing((int16_t)lua_tointeger(L, 1));
     return 0;
@@ -132,6 +138,7 @@ void api_layout_register(lua_State *L) {
         {"setFooterHeight", l_layout_set_footer_height},
         {"setMargins",      l_layout_set_margins},
         {"setMargin",       l_layout_set_margin},
+        {"setButtonBar",    l_layout_set_button_bar},
         {"setLineSpacing",  l_layout_set_line_spacing},
         {"setLineHeight",   l_layout_set_line_height},
         {"setFont",         l_layout_set_font},

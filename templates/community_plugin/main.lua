@@ -80,15 +80,19 @@ function render()
     display.clear()
 
     if fonts.ui then
+        -- Configure layout engine for app mode
+        layout.setHeaderHeight(t.header_height)
+        layout.setFooterHeight(t.button_hints_height)
+        layout.setMargin(0)
+
         ui.draw_header(fonts.ui, plugin.name)
 
-        local cx, cy, cw, ch = display.contentArea()
-        local y = cy + t.header_height + t.vertical_spacing
+        local bx, by, bw, bh = layout.bodyArea()
 
-        display.drawText(fonts.ui, cx + t.side_padding, y, "Hello from " .. plugin.name .. "!")
-        y = y + display.getLineHeight(fonts.ui) + 10
+        display.drawText(fonts.ui, bx + t.side_padding, by, "Hello from " .. plugin.name .. "!")
+        local y = by + display.getLineHeight(fonts.ui) + 10
 
-        display.drawText(fonts.ui, cx + t.side_padding, y, "Press Back to return home")
+        display.drawText(fonts.ui, bx + t.side_padding, y, "Press Back to return home")
 
         ui.draw_button_hints(fonts.ui, buttons.get("default", settings.get("orientation", 0)))
     end

@@ -17,6 +17,7 @@
 #include "sleep_screen.h"
 #include "font_manager.h"
 #include "font_render.h"
+#include "layout_engine.h"
 #include "logging.h"
 
 #include "lua.h"
@@ -481,6 +482,7 @@ bool plugin_manager_start(const char *plugin_id, const char *arg) {
             register_nav_functions(active_state);
             active_index = idx;
             nav_pending = false;
+            layout_reset_defaults();
             call_lifecycle(active_state, "onEnter", arg);
             save_state(target_id);
             LOG_INF("PLUG", "Started (shared): %s", plugins[idx].name);
@@ -511,6 +513,7 @@ bool plugin_manager_start(const char *plugin_id, const char *arg) {
     active_index = idx;
     nav_pending = false;
 
+    layout_reset_defaults();
     call_lifecycle(active_state, "onEnter", arg);
 
     save_state(target_id);

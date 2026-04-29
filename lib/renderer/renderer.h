@@ -137,16 +137,6 @@ void renderer_draw_line_physical(int x1, int y1, int x2, int y2, bool black);
  */
 void renderer_draw_rect_physical(int x, int y, int w, int h, bool black);
 
-/**
- * Get the usable content area, excluding the physical button bar.
- * The button bar occupies 40px at the physical bottom. Depending on
- * orientation, this maps to a different logical edge.
- *
- * @param out_x, out_y  Top-left of content area (logical)
- * @param out_w, out_h  Width and height of content area
- */
-void renderer_get_content_area(int *out_x, int *out_y, int *out_w, int *out_h);
-
 /** Invert all pixels in the framebuffer. */
 void renderer_invert_screen(void);
 

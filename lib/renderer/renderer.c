@@ -295,8 +295,6 @@ void renderer_fill_rounded_rect(int x, int y, int w, int h, int radius, bool bla
 
 /* ── Physical coordinate drawing (bypasses orientation) ──────────── */
 
-#define BUTTON_BAR_HEIGHT 40
-
 void renderer_draw_pixel_physical(int x, int y, bool black) {
     /* Portrait transform: same as ORIENT_PORTRAIT */
     int phyX = y;
@@ -342,34 +340,6 @@ void renderer_draw_rect_physical(int x, int y, int w, int h, bool black) {
     renderer_draw_line_physical(x, y + h - 1, x + w - 1, y + h - 1, black);
     renderer_draw_line_physical(x, y, x, y + h - 1, black);
     renderer_draw_line_physical(x + w - 1, y, x + w - 1, y + h - 1, black);
-}
-
-void renderer_get_content_area(int *out_x, int *out_y, int *out_w, int *out_h) {
-    int w = renderer_screen_width();
-    int h = renderer_screen_height();
-    int bar = BUTTON_BAR_HEIGHT + 8;
-
-    switch (current_orient) {
-        case ORIENT_PORTRAIT:
-            /* physical bottom = logical bottom */
-            *out_x = 0; *out_y = 0; *out_w = w; *out_h = h - bar;
-            break;
-        case ORIENT_LANDSCAPE_CW:
-            /* physical bottom = logical left */
-            *out_x = bar; *out_y = 0; *out_w = w - bar; *out_h = h;
-            break;
-        case ORIENT_PORTRAIT_INV:
-            /* physical bottom = logical top */
-            *out_x = 0; *out_y = bar; *out_w = w; *out_h = h - bar;
-            break;
-        case ORIENT_LANDSCAPE_CCW:
-            /* physical bottom = logical right */
-            *out_x = 0; *out_y = 0; *out_w = w - bar; *out_h = h;
-            break;
-        default:
-            *out_x = 0; *out_y = 0; *out_w = w; *out_h = h - bar;
-            break;
-    }
 }
 
 void renderer_clear_screen(uint8_t color) {

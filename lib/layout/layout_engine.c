@@ -13,6 +13,10 @@
 #include "font_render.h"
 #include "logging.h"
 
+/* Physical button bar: 40px bar + 8px padding at device bottom.
+ * In landscape, this maps to a side edge and must be excluded. */
+#define BUTTON_BAR_PHYSICAL 48
+
 static layout_state_t state;
 
 /* ── Helpers ───────────────────────────────────────────────────── */
@@ -43,6 +47,7 @@ void layout_init(void) {
     /* Defaults */
     state.header_height = 0;
     state.footer_height = 40;
+    state.button_bar    = BUTTON_BAR_PHYSICAL;
     state.margin_top    = 10;
     state.margin_right  = 10;
     state.margin_bottom = 10;
@@ -59,13 +64,39 @@ void layout_init(void) {
             state.bezel_bottom, state.bezel_left);
 }
 
+void layout_reset_defaults(void) {
+    state.header_height = 0;
+    state.footer_height = 40;
+    state.button_bar    = BUTTON_BAR_PHYSICAL;
+    state.margin_top    = 10;
+    state.margin_right  = 10;
+    state.margin_bottom = 10;
+    state.margin_left   = 10;
+    state.line_spacing  = 0;
+    state.line_height   = 0;
+    state.font_id       = -1;
+    layout_recalculate();
+}
+
 /* ── Recalculate ───────────────────────────────────────────────── */
 
 void layout_recalculate(void) {
-    int16_t usable_w = state.display_w - state.bezel_left - state.bezel_right;
-    int16_t usable_h = state.display_h - state.bezel_top - state.bezel_bottom;
-    int16_t origin_x = state.bezel_left;
-    int16_t origin_y = state.bezel_top;
+    /* Effective margins = bezel + button bar on the physical-bottom edge */
+    int16_t eff_top    = state.bezel_top;
+    int16_t eff_right  = state.bezel_right;
+    int16_t eff_bottom = state.bezel_bottom;
+    int16_t eff_left   = state.bezel_left;
+
+    switch (state.orientation) {
+        case ORIENT_LANDSCAPE_CW:   eff_left   += state.button_bar; break;
+        case ORIENT_LANDSCAPE_CCW:  eff_right  += state.button_bar; break;
+        default: break; /* portrait: footer covers button bar zone */
+    }
+
+    int16_t usable_w = state.display_w - eff_left - eff_right;
+    int16_t usable_h = state.display_h - eff_top - eff_bottom;
+    int16_t origin_x = eff_left;
+    int16_t origin_y = eff_top;
 
     /* Header: top of usable area */
     state.header_x = origin_x;
@@ -123,6 +154,11 @@ void layout_set_margins(int16_t top, int16_t right, int16_t bottom, int16_t left
     state.margin_right  = clamp16(right, 0, 100);
     state.margin_bottom = clamp16(bottom, 0, 100);
     state.margin_left   = clamp16(left, 0, 100);
+    layout_recalculate();
+}
+
+void layout_set_button_bar(int16_t height) {
+    state.button_bar = clamp16(height, 0, 100);
     layout_recalculate();
 }
 

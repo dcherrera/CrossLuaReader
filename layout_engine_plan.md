@@ -119,75 +119,24 @@ Migrate home, settings, and file browser to use the layout engine.
 
 Remove old C-side viewport code incrementally. Build and test after each removal.
 
-- \[ \] Remove `BUTTON_BAR_HEIGHT` constant from `renderer.c` (line 298)
-
-  - Build + test
-
-- \[ \] Remove `renderer_get_content_area()` from `renderer.c` (lines 347-373) and its declaration from `renderer.h` (line 148)
-
-  - Build + test
-
-- \[ \] Remove `l_display_content_area()` binding from `api_display.c` (lines 215-224)
-
-  - Remove from `api_display_register()` function table
-
-  - Build + test: verify no plugin crashes (all should use `layout.*` by now)
-
-- \[ \] Deprecate physical coordinate Lua bindings in `api_display.c`:
-
-  - `l_display_draw_line_physical()` (lines 178-186)
-
-  - `l_display_draw_rect_physical()` (lines 188-196)
-
-  - `l_display_draw_text_physical()` (lines 198-213)
-
-  - Keep functions but add LOG_DBG deprecation warning. Remove from public API docs.
-
-  - Build + test
-
-- \[ \] **Document**: Note removals in changelog
-
-- \[ \] **Update plan**: Check off completed tasks
+- [x] Remove `BUTTON_BAR_HEIGHT` constant from `renderer.c`
+- [x] Remove `renderer_get_content_area()` from `renderer.c` and declaration from `renderer.h`
+- [x] Remove `l_display_content_area()` binding from `api_display.c` and function table
+- [x] Physical coordinate Lua bindings (`drawLinePhysical`, `drawRectPhysical`, `drawTextPhysical`) — **kept**, still used by `draw_button_hints()` for orientation-independent button labels
+- [x] Build passes
+- [x] **Document**: Updated `docs/lua-api.md` — removed `display.contentArea()` reference
+- [x] **Update plan**: Completed
 
 ## Phase 6: Dead Code Removal — Lua Libraries
 
 Remove old Lua-side viewport calculations. Copy updated files to SD and test after each change.
 
-- \[ \] Remove `M.get_viewport()` from `reader_utils.lua` (lines 22-45) — all callers migrated in Phase 3
-
-  - Test: TXT and MD readers still open and render
-
-- \[ \] Remove `get_max_visible()` from `settings.lua` (lines 172-176) — replaced by layout engine query
-
-  - Test: settings menu scrolls correctly
-
-- \[ \] Remove `M.content_area()` wrapper from `ui.lua` (lines 79-81) — redirected in Phase 4
-
-  - Test: all UI plugins render correctly
-
-- \[ \] Remove `M.content_max_y()` helper from `ui.lua` (lines 85-88) — replaced by layout body bounds
-
-  - Test: menus don't overflow
-
-- \[ \] Remove hardcoded `phys_w = 480` and `phys_h = 800` from `ui.lua` (lines 170-172) — layout engine provides footer bounds
-
-  - Test: button hints render in correct position all orientations
-
-- \[ \] Deprecate theme height constants in `theme.lua`:
-
-  - `header_height` (lines 8, 21) — add comment "deprecated: use layout.setHeaderHeight()"
-
-  - `menu_row_height` (lines 9, 22) — keep as styling hint only
-
-  - `list_row_height` (lines 10, 23) — keep as styling hint only
-
-  - `button_hints_height` (lines 11, 24) — add comment "deprecated: use layout.setFooterHeight()"
-
-  - Test: all plugins render correctly
-
-- \[ \] **Document**: Update `docs/plugin-guide.md` noting deprecated functions
-
-- \[ \] **Update plan**: Check off completed tasks
+- [x] Remove `M.get_viewport()` from `reader_utils.lua` — done in Phase 3
+- [x] `get_max_visible()` in `settings.lua` — rewritten to use `layout.bodyArea()` in Phase 4 (still needed for scrolling)
+- [x] Remove `M.content_area()` and `M.content_max_y()` from `ui.lua` — done in Phase 4
+- [x] Hardcoded `phys_w`/`phys_h` in `draw_button_hints()` — **kept**, correct for physical button positioning
+- [x] Theme height constants (`header_height`, `button_hints_height`) — **kept**, plugins pass them to layout engine in `onEnter()`
+- [x] **Update plan**: Completed
 
 ## Phase 7: Final Cleanup & Documentation
 
