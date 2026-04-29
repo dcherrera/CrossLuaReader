@@ -114,34 +114,44 @@ static bool decompress_group(int slot_idx, const font_data_t *font,
     }
     slot->valid = false;
 
-    /* Read compressed data from SD */
-    hal_file_t f = hal_storage_open(font_path, HAL_FILE_READ);
-    if (!f) {
-        LOG_ERR("FCACHE", "Failed to open %s for group %d", font_path, group_idx);
-        return false;
-    }
-
+    /* Source the compressed bytes from either the embedded firmware buffer
+     * or the SD card. Either path leaves them in comp_buf for decompression. */
     uint32_t file_offset = font->bitmap_file_offset + grp->compressed_offset;
-    if (!hal_storage_file_seek(f, file_offset)) {
-        LOG_ERR("FCACHE", "Seek failed to offset %u", file_offset);
-        hal_storage_file_close(f);
-        return false;
-    }
 
     uint8_t *comp_buf = (uint8_t *)malloc(grp->compressed_size);
     if (!comp_buf) {
         LOG_ERR("FCACHE", "malloc failed for compressed: %u bytes", grp->compressed_size);
-        hal_storage_file_close(f);
         return false;
     }
 
-    int read = hal_storage_file_read(f, comp_buf, grp->compressed_size);
-    hal_storage_file_close(f);
-
-    if (read != (int)grp->compressed_size) {
-        LOG_ERR("FCACHE", "Read %d, expected %u", read, grp->compressed_size);
-        free(comp_buf);
-        return false;
+    if (font->embedded_data) {
+        if ((uint64_t)file_offset + grp->compressed_size > font->embedded_size) {
+            LOG_ERR("FCACHE", "Embedded read out of range (offset %u, size %u)",
+                    file_offset, grp->compressed_size);
+            free(comp_buf);
+            return false;
+        }
+        memcpy(comp_buf, font->embedded_data + file_offset, grp->compressed_size);
+    } else {
+        hal_file_t f = hal_storage_open(font_path, HAL_FILE_READ);
+        if (!f) {
+            LOG_ERR("FCACHE", "Failed to open %s for group %d", font_path, group_idx);
+            free(comp_buf);
+            return false;
+        }
+        if (!hal_storage_file_seek(f, file_offset)) {
+            LOG_ERR("FCACHE", "Seek failed to offset %u", file_offset);
+            hal_storage_file_close(f);
+            free(comp_buf);
+            return false;
+        }
+        int read = hal_storage_file_read(f, comp_buf, grp->compressed_size);
+        hal_storage_file_close(f);
+        if (read != (int)grp->compressed_size) {
+            LOG_ERR("FCACHE", "Read %d, expected %u", read, grp->compressed_size);
+            free(comp_buf);
+            return false;
+        }
     }
 
     /* Allocate decompression buffer */
@@ -210,8 +220,24 @@ static uint32_t get_aligned_offset(const font_data_t *font, const char *font_pat
 
     if (count == 0) return 0;
 
-    /* Read preceding glyphs from SD to compute aligned offsets.
-     * Only need width + height (first 2 bytes of each 14-byte glyph). */
+    /* Read preceding glyphs to compute aligned offsets. Only need width +
+     * height (first 2 bytes of each 14-byte glyph). For embedded fonts this
+     * is a simple loop of memcpys; for SD we keep the file open across the
+     * loop to avoid re-opening per glyph. */
+    if (font->embedded_data) {
+        for (uint32_t i = 0; i < count; i++) {
+            uint32_t idx = grp->first_glyph_index + i;
+            uint32_t file_off = font->glyphs_file_offset + idx * sizeof(font_glyph_t);
+            if (file_off + 2 > font->embedded_size) break;
+            uint8_t w = font->embedded_data[file_off];
+            uint8_t h = font->embedded_data[file_off + 1];
+            if (w > 0 && h > 0) {
+                offset += ((w + 3) / 4) * h;
+            }
+        }
+        return offset;
+    }
+
     hal_file_t f = hal_storage_open(font_path, HAL_FILE_READ);
     if (!f) return 0;
 
@@ -293,13 +319,20 @@ const uint8_t *font_cache_get_bitmap(const font_data_t *font,
                                       const char *font_path) {
     if (!font || !glyph || !font_path) return NULL;
 
-    /* Uncompressed fonts: read directly from SD */
+    /* Uncompressed fonts: read bitmap directly from font source. */
     if (font->group_count == 0) {
+        uint32_t offset = font->bitmap_file_offset + glyph->data_offset;
+        size_t read_size = glyph->data_length < MAX_GLYPH_SIZE ? glyph->data_length : MAX_GLYPH_SIZE;
+
+        if (font->embedded_data) {
+            if ((uint64_t)offset + read_size > font->embedded_size) return NULL;
+            memcpy(compact_buf, font->embedded_data + offset, read_size);
+            return compact_buf;
+        }
+
         hal_file_t f = hal_storage_open(font_path, HAL_FILE_READ);
         if (!f) return NULL;
-        uint32_t offset = font->bitmap_file_offset + glyph->data_offset;
         hal_storage_file_seek(f, offset);
-        size_t read_size = glyph->data_length < MAX_GLYPH_SIZE ? glyph->data_length : MAX_GLYPH_SIZE;
         hal_storage_file_read(f, compact_buf, read_size);
         hal_storage_file_close(f);
         return compact_buf;

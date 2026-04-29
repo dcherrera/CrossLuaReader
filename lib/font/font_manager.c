@@ -53,6 +53,38 @@ int font_manager_load(const char *path) {
     return slot_id;
 }
 
+int font_manager_load_buffer(const uint8_t *data, uint32_t len) {
+    if (!data || len == 0) return -1;
+
+    /* Find empty slot */
+    int slot_id = -1;
+    for (int i = 0; i < FONT_MAX_LOADED; i++) {
+        if (!slots[i].loaded) {
+            slot_id = i;
+            break;
+        }
+    }
+
+    if (slot_id < 0) {
+        LOG_ERR("FMGR", "No free font slots (max %d)", FONT_MAX_LOADED);
+        return -1;
+    }
+
+    if (!font_loader_load_buffer(data, len, &slots[slot_id].font)) {
+        return -1;
+    }
+
+    /* Embedded fonts have no SD path. Use a sentinel so any code that
+     * inspects path can recognize the embedded case. */
+    strncpy(slots[slot_id].path, "<embedded>", FONT_MAX_PATH - 1);
+    slots[slot_id].path[FONT_MAX_PATH - 1] = '\0';
+    slots[slot_id].loaded = true;
+    slots[slot_id].fallback_id = -1;
+
+    LOG_INF("FMGR", "Font %d loaded from firmware buffer (%u bytes)", slot_id, len);
+    return slot_id;
+}
+
 void font_manager_unload(int font_id) {
     if (font_id < 0 || font_id >= FONT_MAX_LOADED) return;
     if (!slots[font_id].loaded) return;

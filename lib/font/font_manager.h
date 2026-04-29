@@ -22,6 +22,19 @@
 int font_manager_load(const char *path);
 
 /**
+ * Load a firmware-embedded .cfont (bytes in flash) and assign it an ID.
+ * Uses the same slot pool as font_manager_load. Subsequent on-demand glyph
+ * and bitmap reads come from the supplied buffer instead of opening an SD
+ * file. The buffer must remain valid for the lifetime of the font slot —
+ * .rodata arrays from the build pipeline satisfy this.
+ *
+ * @param data Pointer to .cfont bytes in flash
+ * @param len  Size of the buffer in bytes
+ * @return     Font ID (0+), or -1 on failure
+ */
+int font_manager_load_buffer(const uint8_t *data, uint32_t len);
+
+/**
  * Unload a font by ID. Frees all associated memory.
  *
  * @param font_id ID returned by font_manager_load

@@ -20,6 +20,11 @@
 #include "layout_engine.h"
 #include "logging.h"
 
+/* Firmware-bundled rescue UI: const array in flash, generated at build time
+ * by tools/embed_lua.py. Loaded only when SD-side /plugins/home.lua is
+ * unavailable. */
+#include "firmware_home_lua.h"
+
 #include "lua.h"
 #include "lauxlib.h"
 
@@ -43,6 +48,12 @@ static bool nav_pending = false;
 static bool nav_go_home = false;
 static char nav_target_id[PLUGIN_ID_MAX];
 static char nav_arg[PLUGIN_PATH_MAX];
+
+/* Deferred reload flag — set by plugin_manager_request_reload() (called from
+ * Lua via system.reload()), serviced at the top of dispatch_loop AFTER the
+ * current pcall returns. Doing the reload synchronously inside the Lua call
+ * would lua_close() the very state we're executing in. */
+static bool reload_pending = false;
 
 #define STATE_FILE "/crosslua_state.txt"
 
@@ -427,6 +438,49 @@ static void clear_plugin_state(lua_State *L) {
     lua_gc(L, LUA_GCCOLLECT, 0);
 }
 
+/**
+ * Load and start the firmware-bundled rescue home (no SD required).
+ * Used when /plugins/home.lua isn't on SD (card missing, not mounted, or
+ * discovery returned zero plugins). The bundled bytes live in flash
+ * (.rodata) and cost no DRAM until parsed.
+ */
+static bool start_firmware_home(void) {
+    if (active_state) {
+        plugin_manager_stop();
+    }
+
+    active_state = api_create_state();
+    if (!active_state) {
+        LOG_ERR("PLUG", "Failed to create Lua state for firmware home");
+        return false;
+    }
+
+    int err = luaL_loadbuffer(active_state,
+                              (const char *)firmware_home_lua,
+                              firmware_home_lua_len,
+                              "=firmware_home");
+    if (err == 0) {
+        err = lua_pcall(active_state, 0, LUA_MULTRET, 0);
+    }
+    if (err != 0) {
+        const char *msg = lua_tostring(active_state, -1);
+        LOG_ERR("PLUG", "firmware_home load: %s", msg ? msg : "?");
+        lua_close(active_state);
+        active_state = NULL;
+        return false;
+    }
+
+    register_nav_functions(active_state);
+    active_index = -1;  /* Sentinel: active state is firmware-bundled, not in plugins[]. */
+    nav_pending = false;
+
+    layout_reset_defaults();
+    call_lifecycle(active_state, "onEnter", NULL);
+
+    LOG_INF("PLUG", "Started firmware home (SD unavailable)");
+    return true;
+}
+
 bool plugin_manager_start(const char *plugin_id, const char *arg) {
     /* Resolve plugin ID */
     const char *target_id = plugin_id;
@@ -438,12 +492,16 @@ bool plugin_manager_start(const char *plugin_id, const char *arg) {
         target_id = (home_idx >= 0) ? "home" : plugins[0].id;
     }
     if (!target_id) {
-        LOG_ERR("PLUG", "No plugins available");
-        return false;
+        /* No saved state and no discovered plugins — fall back to firmware home. */
+        return start_firmware_home();
     }
 
     int idx = find_plugin_by_id(target_id);
     if (idx < 0) {
+        /* Home requested but not on SD: serve the firmware-bundled rescue UI. */
+        if (strcmp(target_id, "home") == 0) {
+            return start_firmware_home();
+        }
         LOG_ERR("PLUG", "Plugin not found: %s", target_id);
         if (plugin_count > 0) {
             idx = 0;
@@ -570,8 +628,23 @@ static void show_crash_screen(const char *plugin_name, const char *error_msg) {
     }
 }
 
+void plugin_manager_request_reload(void) {
+    reload_pending = true;
+}
+
 void plugin_manager_dispatch_loop(void) {
     if (!active_state) return;
+
+    /* Handle deferred SD reload (requested via system.reload() from Lua).
+     * Safe here because the previous pcall has already returned. */
+    if (reload_pending) {
+        reload_pending = false;
+        plugin_manager_stop();
+        hal_storage_reinit();
+        plugin_manager_reinit();
+        plugin_manager_start("home", NULL);
+        return;
+    }
 
     /* Handle pending navigation */
     if (nav_pending) {
@@ -605,7 +678,10 @@ void plugin_manager_dispatch_loop(void) {
         /* Capture info before destroying state */
         char crash_name[PLUGIN_NAME_MAX];
         char crash_msg[256];
-        strncpy(crash_name, plugins[active_index].name, PLUGIN_NAME_MAX - 1);
+        const char *src_name = (active_index >= 0)
+                                   ? plugins[active_index].name
+                                   : "Firmware Home";
+        strncpy(crash_name, src_name, PLUGIN_NAME_MAX - 1);
         crash_name[PLUGIN_NAME_MAX - 1] = '\0';
         strncpy(crash_msg, msg ? msg : "Unknown error", sizeof(crash_msg) - 1);
         crash_msg[sizeof(crash_msg) - 1] = '\0';

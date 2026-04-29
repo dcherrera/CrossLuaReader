@@ -47,18 +47,21 @@ static const font_glyph_t *cache_get_glyph(font_data_t *font, const char *font_p
         }
     }
 
-    /* Cache miss — read from SD */
-    hal_file_t f = hal_storage_open(font_path, HAL_FILE_READ);
-    if (!f) return NULL;
-
+    /* Cache miss — read 14 bytes from the font source (firmware buffer or SD). */
     uint32_t offset = font->glyphs_file_offset + glyph_index * sizeof(font_glyph_t);
-    hal_storage_file_seek(f, offset);
-
     font_glyph_t g;
-    int read = hal_storage_file_read(f, &g, sizeof(font_glyph_t));
-    hal_storage_file_close(f);
 
-    if (read != sizeof(font_glyph_t)) return NULL;
+    if (font->embedded_data) {
+        if (offset + sizeof(font_glyph_t) > font->embedded_size) return NULL;
+        memcpy(&g, font->embedded_data + offset, sizeof(font_glyph_t));
+    } else {
+        hal_file_t f = hal_storage_open(font_path, HAL_FILE_READ);
+        if (!f) return NULL;
+        hal_storage_file_seek(f, offset);
+        int read = hal_storage_file_read(f, &g, sizeof(font_glyph_t));
+        hal_storage_file_close(f);
+        if (read != sizeof(font_glyph_t)) return NULL;
+    }
 
     /* Store in cache */
     font->glyph_cache[lru_slot].glyph_index = glyph_index;

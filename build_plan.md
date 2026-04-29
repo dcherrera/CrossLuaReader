@@ -99,6 +99,26 @@
 - [x] **Document**: Updated `docs/lua-api.md`, `docs/plugin-guide.md`, `docs/architecture.md`
 - [x] **Update plan**: Completed
 
+## Phase 8.5: Firmware Home Fallback
+
+Bundle a minimal rescue UI in firmware so the device always boots to a usable
+screen, even when the SD card is missing, unmounted, or has no `/plugins/`.
+Cost: ~2.5 KB of `.rodata` flash, zero DRAM when SD is healthy (the embedded
+buffer is only parsed if SD-side `home.lua` can't be loaded).
+
+- [x] `src/embedded/firmware_home.lua` — minimal rescue UI: bold "PLEASE INSERT SD" + Reload SD button. No `require()`, boot font only.
+- [x] `tools/embed_lua.py` — PlatformIO pre-script: emits `lib/plugin/firmware_home_lua.h` with `const unsigned char firmware_home_lua[]` + length.
+- [x] `platformio.ini` — `extra_scripts = pre:tools/embed_lua.py`
+- [x] `font.boot()` Lua binding — exposes `boot_font_get_id()` so rescue UI can render without SD-loaded fonts.
+- [x] `plugin_manager_start("home", ...)`: when home isn't on SD, fall back to embedded buffer via `start_firmware_home()`. `active_index = -1` sentinel for embedded.
+- [x] Crash-screen path in `dispatch_loop` guards `active_index < 0` (uses "Firmware Home" label).
+- [x] Fix `system.reload()` use-after-free: it now sets `reload_pending` flag; `dispatch_loop` performs the actual reinit after the in-flight pcall returns. Adds `plugin_manager_request_reload()` to public API.
+- [x] `.gitignore` — `lib/plugin/firmware_home_lua.h` is generated.
+- [ ] Build & verify: confirm `.rodata` grew by ~2.5 KB and `.bss`/`.data` are unchanged. (Blocked: pre-existing pio env error — `fatfs` module missing from espressif32 platform.)
+- [ ] Test on device: pull SD pre-boot → rescue UI appears; press CONFIRM with SD reinserted → loads SD home cleanly.
+- [ ] **Document**: Add a brief section to `docs/architecture.md` covering the firmware-home fallback path and the `system.reload()` deferred-reload contract.
+- [ ] **Update plan**: check off completed.
+
 ## Phase 9: Reader Plugins
 
 - [x] Implement `text.*` C API (indexPages, getPageLines) — streaming word-wrap and pagination in C

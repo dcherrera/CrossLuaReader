@@ -161,4 +161,11 @@ typedef struct {
 
     uint32_t bitmap_file_offset;  /**< Absolute offset in .cfont file */
     uint8_t  *metadata_buf;       /**< Allocation for intervals + groups */
+
+    /* Embedded-source backing: when non-NULL, the .cfont content lives in
+     * firmware flash (.rodata) and all on-demand reads (glyph metadata,
+     * compressed bitmap groups) come from this buffer instead of the SD
+     * card. NULL for SD-loaded fonts; populated by font_loader_load_buffer. */
+    const uint8_t *embedded_data;
+    uint32_t       embedded_size;
 } font_data_t;

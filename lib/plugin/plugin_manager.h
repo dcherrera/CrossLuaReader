@@ -96,5 +96,17 @@ int plugin_manager_find_reader(const char *extension);
 /**
  * Re-scan plugins from SD card. Stops active plugin, clears list,
  * re-discovers from /plugins/. Use after SD card hot-swap.
+ *
+ * MUST NOT be called from inside a Lua call on the active state — it
+ * destroys that state. Use plugin_manager_request_reload() from Lua-side
+ * code paths instead; the dispatch loop performs the reload safely after
+ * the in-flight pcall returns.
  */
 void plugin_manager_reinit(void);
+
+/**
+ * Request a deferred SD reload + plugin restart. Safe to call from inside
+ * a Lua callback: dispatch_loop performs hal_storage_reinit() +
+ * plugin_manager_reinit() + start("home") after the current pcall returns.
+ */
+void plugin_manager_request_reload(void);

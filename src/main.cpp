@@ -27,6 +27,12 @@ extern "C" {
 #include "api_input.h"
 #include "plugin_manager.h"
 #include "logging.h"
+
+/* Firmware-bundled boot font: const array in flash, generated at build time
+ * by tools/embed_assets.py. Loaded as a fallback when the SD copy at
+ * /fonts/Ubuntu/Ubuntu-12-Regular.cfont is unavailable, so the rescue UI
+ * (and crash/sleep screens) can render text without an SD card. */
+#include "embedded_boot_font.h"
 }
 
 void setup() {
@@ -80,14 +86,25 @@ void setup() {
     /* Step 8: Font cache */
     font_cache_init();
 
-    /* Step 8.5: Boot font — loaded before Lua for crash/sleep screens */
+    /* Step 8.5: Boot font — required for crash/sleep/rescue screens.
+     * Try SD first (the SD copy may be a newer/different font than what we
+     * bundled); fall back to the firmware-embedded copy if SD is missing,
+     * unmounted, or the file isn't there. The embedded copy guarantees we
+     * always have a usable font, including in the rescue UI when the SD
+     * card is the very thing that failed. */
     {
         int bf = font_manager_load("/fonts/Ubuntu/Ubuntu-12-Regular.cfont");
         if (bf >= 0) {
             boot_font_set_id(bf);
-            LOG_INF("MAIN", "Boot font loaded: slot %d", bf);
+            LOG_INF("MAIN", "Boot font loaded from SD: slot %d", bf);
         } else {
-            LOG_ERR("MAIN", "Boot font load failed — crash screens will be textless");
+            bf = font_manager_load_buffer(embedded_boot_font, embedded_boot_font_len);
+            if (bf >= 0) {
+                boot_font_set_id(bf);
+                LOG_INF("MAIN", "Boot font loaded from firmware buffer: slot %d", bf);
+            } else {
+                LOG_ERR("MAIN", "Boot font load failed (SD + firmware) — crash/rescue screens will be textless");
+            }
         }
     }
 

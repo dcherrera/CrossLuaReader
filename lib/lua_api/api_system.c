@@ -128,12 +128,12 @@ static int l_system_set_sleep_hook(lua_State *L) {
     return 0;
 }
 
-/* system.reload() — reinit SD card and restart plugins from home */
+/* system.reload() — request a deferred SD reload + restart from home.
+ * Returns immediately; the actual reload runs after the current pcall
+ * unwinds (otherwise we'd lua_close the state we're executing in). */
 static int l_system_reload(lua_State *L) {
     (void)L;
-    hal_storage_reinit();
-    plugin_manager_reinit();
-    plugin_manager_start("home", NULL);
+    plugin_manager_request_reload();
     return 0;
 }
 
