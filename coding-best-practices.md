@@ -469,6 +469,107 @@ tests/                              # Test files (mirror src/ structure)
 - Headers define the full API contract (see Function Documentation section)
 - Each category directory is a potential standalone library
 
+### Embedded C: Memory Efficiency
+
+For ESP32-C3 / RISC-V targets specifically. Tight RAM (~380 KB), no FPU, no PSRAM, and a single SPI bus shared between SD and display shape almost every implementation choice. See `.skills/SKILL.md` "The Resource Protocol" for the rules; this section covers techniques and habits.
+
+#### Inspect the linker map file
+
+Add `-Wl,-Map=output.map` to your linker flags. The map file shows exactly which symbol consumed which bytes. Read it after every meaningful change:
+
+```sh
+pio run -t size                                            # PlatformIO summary
+riscv32-esp-elf-nm --size-sort -t d firmware.elf | tail -50  # Largest symbols
+riscv32-esp-elf-objdump -h firmware.elf                    # Section sizes
+```
+
+Largest symbols are usually surprising and almost always actionable. Make this a weekly habit during active development.
+
+#### Arena (bump) allocator pattern
+
+For dynamic-but-bounded memory needs, prefer arenas over malloc/free. Allocate the backing buffer once (statically), bump-allocate from it, reset between major operations:
+
+```c
+typedef struct {
+    uint8_t *base;
+    size_t size;
+    size_t used;
+} arena_t;
+
+void *arena_alloc(arena_t *a, size_t n) {
+    if (a->used + n > a->size) return NULL;
+    void *p = a->base + a->used;
+    a->used += n;
+    return p;
+}
+
+void arena_reset(arena_t *a) { a->used = 0; }
+```
+
+Solves ~80% of dynamic-memory needs without fragmentation. Useful per-plugin or per-render-pass with a static backing buffer of a known maximum size.
+
+#### Bitfields for in-memory state
+
+Group flags and small enums into a single byte instead of letting each `bool` consume 4 bytes:
+
+```c
+// 4 bytes
+struct {
+    bool dirty;
+    bool valid;
+    bool needs_redraw;
+    uint8_t mode;
+} state;
+
+// 1 byte
+struct {
+    uint8_t dirty        : 1;
+    uint8_t valid        : 1;
+    uint8_t needs_redraw : 1;
+    uint8_t mode         : 2;
+    uint8_t reserved     : 3;
+} state;
+```
+
+In-memory state only — bitfield ordering varies across compilers, so for wire/file formats use explicit bitwise ops (`x |= (1 << 3)`) instead.
+
+#### Stack watermarking for debug builds
+
+Stack overflows on the C3 are silent (no MMU; the MPU helps but doesn't catch everything). Paint the stack with a known pattern at boot and check the high-water mark from a debug command:
+
+```c
+void stack_paint(void) {
+    for (uint8_t *p = stack_start; p < stack_end; p++) *p = 0xA5;
+}
+
+size_t stack_used(void) {
+    uint8_t *p = stack_start;
+    while (*p == 0xA5 && p < stack_end) p++;
+    return stack_end - p;
+}
+```
+
+Print the result in development builds. Lets you size FreeRTOS task stacks based on data, not guesswork. For per-task stack inspection, FreeRTOS also exposes `uxTaskGetStackHighWaterMark()`.
+
+#### Build flags worth verifying
+
+ESP-IDF defaults are reasonable but worth confirming in `platformio.ini` or `sdkconfig`:
+
+- **`-Os`** — optimize for size (often runs faster too because more fits in cache)
+- **`-ffunction-sections -fdata-sections`** + **`-Wl,--gc-sections`** — strips unused code/data per function. 20-40% binary size reduction with zero source changes.
+- **`-Werror=stack-usage=512`** — fails build if any function uses more than 512 bytes of stack. Forces discipline before crashes happen.
+- **`-fstack-usage`** — generates a `.su` file per source file showing per-function stack usage. Read these when chasing stack issues.
+
+#### Symbol size auditing
+
+Routine habit: identify the biggest things in flash and RAM, decide whether they should be that big.
+
+```sh
+riscv32-esp-elf-nm --size-sort -t d firmware.elf | tail -50
+```
+
+Common surprises: a `const` table that should be in flash but ended up in RAM (missing `static const`), `printf` format string proliferation, a library pulled in unexpectedly because of one feature flag, a struct member ordering that wasted half its space to padding.
+
 ### Swift (macOS / iOS)
 
 ```

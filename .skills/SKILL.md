@@ -95,6 +95,21 @@ uname -s
 
 6. **SD Write Throttling**: Never write settings/progress on every user interaction. Guard writes with value-change checks. Debounce progress saves to activity exit or every N page turns.
 
+7. **Integer types — pick the right size**: Use `uint8_t`/`uint16_t`/`int32_t` from `<stdint.h>`, not bare `int`. Default `int` is 32-bit on C3 — wasteful for values that fit in 8 or 16 bits, especially in arrays and structs. Be explicit about size.
+
+8. **Struct fields — largest-to-smallest**: Order struct members by size descending. Compiler alignment padding can otherwise waste 30-50% of a struct. Free win, no `__attribute__((packed))` required (and packed brings unaligned-access risk on RISC-V).
+
+9. **No VLAs**: Variable-length arrays go on the stack and you can't bound them at compile time. Use a fixed-size buffer or heap allocation instead.
+
+10. **Don't use `enum` for OR'd flags**: `enum` is `int`-sized (4 bytes). Use `#define` or `static const uint8_t` for bit flags to avoid the 4× size overhead.
+
+11. **Fixed-point over float on hot paths**: ESP32-C3 has no FPU. Every `float`/`double` op is software-emulated and pulls in a large libgcc helper. Use Q16.16 fixed-point or scaled integers for UI math, sensor scaling, animations.
+
+12. **`restrict` on hot-loop pointer params**: When a function loops over two non-overlapping buffers, mark the parameters `restrict` so the compiler can keep values in registers instead of reloading on every access.
+   ```c
+   void blit(uint8_t *restrict dst, const uint8_t *restrict src, size_t n);
+   ```
+
 ### RISC-V Alignment
 ESP32-C3 faults on unaligned multi-byte loads. Never cast a `uint8_t*` buffer to a wider type and dereference directly. Use `memcpy`:
 
