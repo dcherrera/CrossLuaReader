@@ -118,6 +118,39 @@ function plugin.onEvent(event)
 end
 ```
 
+## Plugin Capabilities
+
+Most plugins only need the **core** Lua API (display, input, storage, system, font, layout) — no declaration required. If your plugin uses an opt-in capability — `text` for word-wrap and pagination helpers, or any future module like `zip`, `xml`, `epub`, `css`, `image` — declare it in your manifest's `requires` field. Capabilities are only registered into Lua states for plugins that need them, so plugins that don't list a capability pay zero RAM cost for it.
+
+```lua
+plugin = {
+  name = "TXT Reader",
+  id = "txt_reader",
+  type = "reader",
+  fileExtensions = {"txt"},
+  requires = {"text"},   -- text.indexPages, text.getPageLines, text.wrapString
+  system = true,
+}
+```
+
+**Recognized capabilities (current):**
+
+| Capability | What it adds | Notes |
+|------------|--------------|-------|
+| `text` | `text.indexPages`, `text.getPageLines`, `text.indexMarkdownPages`, `text.renderMarkdownPage`, `text.wrapString` | Streaming word-wrap and pagination. Required by TXT and MD readers. |
+
+**Future capabilities** (planned for the EPUB reader phases — not yet implemented):
+
+- `zip` — ZIP archive entry reads
+- `xml` — XML/HTML SAX parser
+- `epub` — high-level EPUB book object (manifest, spine, TOC, metadata)
+- `css` — CSS subset parser + selector matcher
+- `image` — JPEG / PNG decoders for inline `<img>` and cover thumbnails
+
+If your plugin declares an unknown capability, the registration is skipped with a log entry — older firmware can still boot a plugin written for newer firmware (the unrecognized capability is just unavailable). Recognized capabilities go up over time; old plugins keep working.
+
+**Limits:** up to `PLUGIN_REQ_MAX` (6) capabilities per plugin, each up to `PLUGIN_REQ_LEN` (12) characters including NUL.
+
 ## Plugin Discovery
 
 The plugin manager scans `/plugins/` on boot (or on SD reload via power long-press). Discovery is done entirely in C by reading the first 1KB of each plugin file and extracting manifest fields with string matching — **no Lua state is created** during discovery, making it fast (~12ms for 3 plugins) and zero heap overhead.

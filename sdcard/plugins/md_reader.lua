@@ -14,6 +14,7 @@ plugin = {
     id = "md_reader",
     type = "reader",
     fileExtensions = {"md"},
+    requires = {"text"},
     system = true,
 }
 

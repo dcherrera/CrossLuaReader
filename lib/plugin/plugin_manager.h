@@ -19,18 +19,22 @@
 #define PLUGIN_PATH_MAX        64
 #define PLUGIN_EXT_MAX         8
 #define PLUGIN_EXT_LEN         8
+#define PLUGIN_REQ_MAX         6   /**< max declared capabilities per plugin */
+#define PLUGIN_REQ_LEN        12   /**< max bytes per capability name (with NUL) */
 
 /** Metadata for a discovered plugin, parsed from its plugin table. */
 typedef struct {
-    char name[PLUGIN_NAME_MAX];
-    char id[PLUGIN_ID_MAX];
-    char path[PLUGIN_PATH_MAX];
-    char menu_entry[PLUGIN_NAME_MAX];
-    char type[12];
-    char file_extensions[PLUGIN_EXT_MAX][PLUGIN_EXT_LEN];
-    int  ext_count;
-    bool valid;
-    bool system;   /**< true = stock plugin, shares Lua state with other stock plugins */
+    char    name[PLUGIN_NAME_MAX];
+    char    id[PLUGIN_ID_MAX];
+    char    path[PLUGIN_PATH_MAX];
+    char    menu_entry[PLUGIN_NAME_MAX];
+    char    type[12];
+    char    file_extensions[PLUGIN_EXT_MAX][PLUGIN_EXT_LEN];
+    char    caps[PLUGIN_REQ_MAX][PLUGIN_REQ_LEN];  /**< opt-in capability names from manifest's `requires = {...}` */
+    int     ext_count;
+    uint8_t caps_count;
+    bool    valid;
+    bool    system;   /**< true = stock plugin, shares Lua state with other stock plugins */
 } plugin_info_t;
 
 /**

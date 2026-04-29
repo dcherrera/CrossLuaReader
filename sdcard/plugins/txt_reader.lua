@@ -16,6 +16,7 @@ plugin = {
     id = "txt_reader",
     type = "reader",
     fileExtensions = {"txt"},
+    requires = {"text"},
     system = true,
 }
 

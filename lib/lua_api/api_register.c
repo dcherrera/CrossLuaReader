@@ -206,14 +206,26 @@ static void install_sd_searcher(lua_State *L) {
     lua_pop(L, 2);  /* pop searchers table and package table */
 }
 
-void api_register_all(lua_State *L) {
+void api_register_core(lua_State *L) {
     api_display_register(L);
     api_input_register(L);
     api_storage_register(L);
     api_system_register(L);
     api_font_register(L);
-    api_text_register(L);
     api_layout_register(L);
+}
+
+void api_register_capability(lua_State *L, const char *cap) {
+    if (!cap || !cap[0]) return;
+
+    if (strcmp(cap, "text") == 0) {
+        api_text_register(L);
+        return;
+    }
+
+    /* Unknown capability — log and ignore (forward compatibility:
+     * older firmware can boot a plugin that declares a future capability). */
+    LOG_INF("LUA", "Unknown capability '%s' — skipping registration", cap);
 }
 
 lua_State *api_create_state(void) {
@@ -230,10 +242,10 @@ lua_State *api_create_state(void) {
     uint32_t h2 = hal_system_free_heap();
 
     install_sd_searcher(L);
-    api_register_all(L);
+    api_register_core(L);
     uint32_t h3 = hal_system_free_heap();
 
-    LOG_INF("LUA", "Lua state: bare=%uB, +libs=%uB, +API=%uB (total %uB)",
+    LOG_INF("LUA", "Lua state: bare=%uB, +libs=%uB, +core=%uB (total %uB)",
             h0 - h1, h1 - h2, h2 - h3, h0 - h3);
     return L;
 }

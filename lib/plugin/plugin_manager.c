@@ -210,6 +210,32 @@ static bool parse_plugin_manifest(const char *path, plugin_info_t *info) {
         }
     }
 
+    /* Capability requirements: look for requires = { "cap1", "cap2" } in the
+     * manifest. Mirrors the fileExtensions parser above. Capability names
+     * register opt-in Lua bindings (text, zip, xml, epub, css, image, ...).
+     * Plugins that declare nothing get only the core API set.
+     * (Field is named `caps` in C because `requires` is a C++20 keyword
+     *  and this header is included from main.cpp.) */
+    const char *req_start = strstr(buf, "requires");
+    if (req_start) {
+        const char *brace = strchr(req_start, '{');
+        if (brace) {
+            const char *p = brace + 1;
+            while (*p && *p != '}' && info->caps_count < PLUGIN_REQ_MAX) {
+                while (*p && *p != '"' && *p != '\'' && *p != '}') p++;
+                if (*p == '}' || !*p) break;
+                char q = *p++;
+                int i = 0;
+                while (*p && *p != q && i < PLUGIN_REQ_LEN - 1) {
+                    info->caps[info->caps_count][i++] = *p++;
+                }
+                info->caps[info->caps_count][i] = '\0';
+                if (i > 0) info->caps_count++;
+                if (*p == q) p++;
+            }
+        }
+    }
+
     /* Check system = true flag */
     const char *sys = strstr(buf, "system");
     if (sys) {
@@ -422,6 +448,21 @@ const plugin_info_t *plugin_manager_get_info(int index) {
 }
 
 /**
+ * Register every capability declared in a plugin's `requires` manifest field
+ * into the supplied Lua state. Safe to call repeatedly on the same state —
+ * api_register_capability() replaces any prior registration of the same
+ * module via luaL_newlib + lua_setglobal. Used both on fresh states (full
+ * switch) and on re-used states (shared-state path between system plugins
+ * where the previous plugin may not have needed the same caps).
+ */
+static void register_capabilities(lua_State *L, const plugin_info_t *info) {
+    if (!info) return;
+    for (uint8_t i = 0; i < info->caps_count; i++) {
+        api_register_capability(L, info->caps[i]);
+    }
+}
+
+/**
  * Clear the plugin global table and loaded module cache from a Lua state.
  * Prepares the state for loading a new plugin without destroying it.
  */
@@ -528,6 +569,10 @@ bool plugin_manager_start(const char *plugin_id, const char *arg) {
         LOG_INF("PLUG", "Reusing Lua state for system plugin: %s", target_id);
         clear_plugin_state(active_state);
 
+        /* Register any capabilities the new plugin needs that the previous
+         * one didn't. Idempotent for already-registered ones. */
+        register_capabilities(active_state, &plugins[idx]);
+
         /* Load new plugin into existing state */
         if (load_lua_file(active_state, plugins[idx].path) != 0) {
             const char *err = lua_tostring(active_state, -1);
@@ -558,6 +603,10 @@ bool plugin_manager_start(const char *plugin_id, const char *arg) {
         LOG_ERR("PLUG", "Failed to create Lua state");
         return false;
     }
+
+    /* Register opt-in capabilities declared by the plugin manifest before
+     * loading the plugin code (the chunk may reference them at top level). */
+    register_capabilities(active_state, &plugins[idx]);
 
     if (load_lua_file(active_state, plugins[idx].path) != 0) {
         const char *err = lua_tostring(active_state, -1);
