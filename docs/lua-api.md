@@ -386,35 +386,38 @@ local bx, by, bw, bh = layout.bodyArea()
 
 C-side text indexing and page layout. Streams files from SD in 8KB chunks — never loads the full file. Word wrapping uses font measurement directly in C for maximum speed.
 
-### text.indexPages(fontId, path, viewportWidth, linesPerPage) → table
+### text.indexPages(fontId, path) → table
 
-Scan an entire text file and build a page offset index. Streams the file in 8KB chunks, word-wraps each line with font measurement, and returns a Lua table of byte offsets (one per page). The file is never fully loaded into memory.
+Scan an entire text file and build a page offset index. Streams the file in chunks, word-wraps each line with font measurement, and returns a Lua table of byte offsets (one per page). Uses `layout.bodyWidth()` and `layout.linesPerPage()` from the layout engine — configure the layout before calling.
 
-- Keeps one file handle open during the entire scan (no open/close per chunk)
-- Uses static 8KB buffer (no heap allocation)
+- Keeps one file handle open during the entire scan
+- Uses static buffer (no heap allocation)
 - Glyph cache stays warm across the scan
 - Returns `nil, errmsg` on failure
 
-### text.getPageLines(fontId, path, offset, viewportWidth, linesPerPage) → table
+### text.getPageLines(fontId, path, offset) → table
 
-Read one page of text starting at a byte offset. Word-wraps with font measurement and returns a table of display line strings. Each string is one wrapped line ready for `display.drawText()`.
+Read one page of text starting at a byte offset. Word-wraps with font measurement and returns a table of display line strings. Uses layout engine for width and line count.
 
 Returns `nil` on failure.
 
 **Example:**
 ```lua
-local fonts = require("lib.fonts")
-fonts.init()
+-- Configure layout engine first
+layout.setHeaderHeight(0)
+layout.setFooterHeight(40)
+layout.setMargin(10)
+layout.setFont(fonts.reader)
 
--- Index the file (fast, C-side)
-local offsets = text.indexPages(fonts.reader, "/books/story.txt", 440, 22)
+-- Index the file (fast, C-side, uses layout engine)
+local offsets = text.indexPages(fonts.reader, "/books/story.txt")
 
 -- Render page 5
-local lines = text.getPageLines(fonts.reader, "/books/story.txt",
-    offsets[5], 440, 22)
+local lines = text.getPageLines(fonts.reader, "/books/story.txt", offsets[5])
 
+local bx, by = layout.bodyArea()
 for i, line in ipairs(lines) do
-    display.drawText(fonts.reader, 20, 20 + (i-1) * 18, line)
+    display.drawText(fonts.reader, bx, by + (i-1) * layout.lineHeight(), line)
 end
 display.refresh()
 ```

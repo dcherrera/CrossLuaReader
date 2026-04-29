@@ -17,6 +17,7 @@
 #include "hal_storage.h"
 #include "hal_system.h"
 #include "font_manager.h"
+#include "layout_engine.h"
 #include "font_render.h"
 #include "utf8.h"
 #include "logging.h"
@@ -239,8 +240,8 @@ static void free_buffers(void) {
 static int l_text_index_pages(lua_State *L) {
     int font_id = (int)lua_tointeger(L, 1);
     const char *path = luaL_checkstring(L, 2);
-    int vp_width = (int)lua_tointeger(L, 3);
-    int lines_per_page = (int)lua_tointeger(L, 4);
+    int vp_width = (int)layout_body_width();
+    int lines_per_page = (int)layout_lines_per_page();
 
     if (lines_per_page < 1) lines_per_page = 1;
     if (vp_width < 10) vp_width = 10;
@@ -433,8 +434,8 @@ static int l_text_get_page_lines(lua_State *L) {
     int font_id = (int)lua_tointeger(L, 1);
     const char *path = luaL_checkstring(L, 2);
     uint32_t offset = (uint32_t)lua_tointeger(L, 3);
-    int vp_width = (int)lua_tointeger(L, 4);
-    int lines_per_page = (int)lua_tointeger(L, 5);
+    int vp_width = (int)layout_body_width();
+    int lines_per_page = (int)layout_lines_per_page();
 
     if (lines_per_page < 1) lines_per_page = 1;
 
@@ -661,8 +662,8 @@ static int detect_block_type(const char *line, int len, int *content_start, int 
 static int l_text_index_markdown_pages(lua_State *L) {
     int font_id = (int)lua_tointeger(L, 1);
     const char *path = luaL_checkstring(L, 2);
-    int vp_width = (int)lua_tointeger(L, 3);
-    int lines_per_page = (int)lua_tointeger(L, 4);
+    int vp_width = (int)layout_body_width();
+    int lines_per_page = (int)layout_lines_per_page();
 
     if (lines_per_page < 1) lines_per_page = 1;
     if (vp_width < 10) vp_width = 10;
@@ -871,7 +872,7 @@ static int l_text_wrap_string(lua_State *L) {
     int font_id = (int)lua_tointeger(L, 1);
     size_t str_len;
     const char *str = luaL_checklstring(L, 2, &str_len);
-    int vp_width = (int)lua_tointeger(L, 3);
+    int vp_width = (int)layout_body_width();
 
     if (!font_manager_get(font_id)) {
         return luaL_error(L, "invalid font id: %d", font_id);
@@ -1121,10 +1122,10 @@ static int l_text_render_markdown_page(lua_State *L) {
     int font_id = (int)lua_tointeger(L, 1);
     const char *path = luaL_checkstring(L, 2);
     uint32_t offset = (uint32_t)lua_tointeger(L, 3);
-    int vp_width = (int)lua_tointeger(L, 4);
-    int lines_per_page = (int)lua_tointeger(L, 5);
-    bool in_code = lua_toboolean(L, 6);
-    luaL_checktype(L, 7, LUA_TFUNCTION);
+    int vp_width = (int)layout_body_width();
+    int lines_per_page = (int)layout_lines_per_page();
+    bool in_code = lua_toboolean(L, 4);
+    luaL_checktype(L, 5, LUA_TFUNCTION);
 
     if (!font_manager_get(font_id)) {
         return luaL_error(L, "invalid font id: %d", font_id);
@@ -1135,8 +1136,8 @@ static int l_text_render_markdown_page(lua_State *L) {
         return 1;
     }
 
-    /* Store callback in registry */
-    lua_pushvalue(L, 7);
+    /* Store callback in registry (arg 5 after removing viewport params) */
+    lua_pushvalue(L, 5);
     int cb_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
     hal_file_t f = hal_storage_open(path, HAL_FILE_READ);

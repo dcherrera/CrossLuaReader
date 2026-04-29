@@ -27,22 +27,23 @@ Build the layout engine C module and Lua bindings. No integration with existing 
 - [x] **Document**: Updated `docs/lua-api.md` with full `layout.*` API reference
 - [x] **Update plan**: Completed
 
-## Phase 2: Text API Integration
+## Phase 2: Text API Integration ✅
 
 Wire the `text.*` C functions to query the layout engine directly instead of receiving viewport dimensions as parameters.
 
-- [ ] Modify `text.indexPages()` — remove `viewportWidth` and `linesPerPage` parameters, query `layout_body_area()` and `layout_lines_per_page()` internally
-- [ ] Modify `text.getPageLines()` — remove `viewportWidth` and `linesPerPage` parameters, query layout engine
-- [ ] Modify `text.indexMarkdownPages()` — remove viewport parameters, query layout engine
-- [ ] Modify `text.renderMarkdownPage()` — remove viewport parameters, query layout engine
-- [ ] Modify `text.wrapString()` — remove `viewportWidth` parameter, query `layout_body_area()` for width
-- [ ] Update `txt_reader.lua` — remove viewport parameter passing to `text.*` calls, call `layout.setFont()` and `layout.setFooterHeight()` in `onEnter()`
-- [ ] Update `md_reader.lua` — same changes as txt_reader
-- [ ] Build passes
-- [ ] Test: TXT reader opens file, indexes correctly using layout engine values, pages match screen
-- [ ] Test: MD reader opens file, indexes and renders correctly
-- [ ] **Document**: Update `docs/lua-api.md` with updated `text.*` function signatures
-- [ ] **Update plan**: Check off completed tasks
+- [x] Modify `text.indexPages()` — remove `viewportWidth` and `linesPerPage` parameters, query `layout_body_area()` and `layout_lines_per_page()` internally
+- [x] Modify `text.getPageLines()` — remove `viewportWidth` and `linesPerPage` parameters, query layout engine
+- [x] Modify `text.indexMarkdownPages()` — remove viewport parameters, query layout engine
+- [x] Modify `text.renderMarkdownPage()` — remove viewport parameters, query layout engine
+- [x] Modify `text.wrapString()` — remove `viewportWidth` parameter, query `layout_body_area()` for width
+- [x] Update `txt_reader.lua` — remove viewport parameter passing to `text.*` calls, call `layout.setFont()` and `layout.setFooterHeight()` in `onEnter()`
+- [x] Update `md_reader.lua` — same changes as txt_reader
+- [x] Build passes
+- [x] Test: TXT reader opens file, indexes correctly using layout engine values, pages match screen — portrait ✓
+- [x] Test: MD reader opens file, indexes and renders correctly — portrait ✓
+- [ ] Known issue: landscape orientation layout calculations need work (deferred)
+- [x] **Document**: Updated `docs/lua-api.md` with new `text.*` function signatures (no viewport params)
+- [x] **Update plan**: Completed
 
 ## Phase 3: Reader Plugin Migration
 

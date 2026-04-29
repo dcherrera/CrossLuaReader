@@ -108,9 +108,8 @@ local function render()
     local bq_start_y = nil  -- track blockquote start for border
 
     -- C does all the heavy lifting: parse, strip, wrap, span.
-    -- We just draw.
-    text.renderMarkdownPage(fid, file_path, offset,
-        viewport.w, viewport.lines_per_page, in_code,
+    -- Queries layout engine for width/linesPerPage internally.
+    text.renderMarkdownPage(fid, file_path, offset, in_code,
         function(block_type, line_text, spans, indent)
 
             local x = viewport.x
@@ -235,6 +234,12 @@ function plugin.onEnter(path)
         end
     end
 
+    -- Configure layout engine for reader mode
+    layout.setHeaderHeight(0)
+    layout.setFooterHeight(40)
+    layout.setMargin(settings.get("screenMargin", 10))
+    layout.setFont(fonts.reader or fonts.ui)
+
     viewport = reader_utils.get_viewport(fonts.reader or fonts.ui)
 
     if not load_cache() then
@@ -244,10 +249,9 @@ function plugin.onEnter(path)
         end
         display.refresh(2)
 
-        -- C-side markdown-aware indexing
+        -- C-side markdown-aware indexing — queries layout engine internally
         local offsets, code_states = text.indexMarkdownPages(
-            fonts.reader or fonts.ui, path,
-            viewport.w, viewport.lines_per_page)
+            fonts.reader or fonts.ui, path)
 
         if offsets and code_states then
             page_offsets = offsets

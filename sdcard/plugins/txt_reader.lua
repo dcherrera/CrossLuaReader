@@ -87,9 +87,8 @@ local function render()
     local offset = page_offsets[current_page] or 0
     local fid = fonts.reader or fonts.ui
 
-    -- C-side word-wrapped page lines — fast, no Lua heap pressure
-    local lines = text.getPageLines(fid, file_path, offset,
-        viewport.w, viewport.lines_per_page)
+    -- C-side word-wrapped page lines — queries layout engine internally
+    local lines = text.getPageLines(fid, file_path, offset)
 
     if not lines then return end
 
@@ -140,6 +139,12 @@ function plugin.onEnter(path)
         end
     end
 
+    -- Configure layout engine for reader mode
+    layout.setHeaderHeight(0)
+    layout.setFooterHeight(40)
+    layout.setMargin(settings.get("screenMargin", 10))
+    layout.setFont(fonts.reader or fonts.ui)
+
     viewport = reader_utils.get_viewport(fonts.reader or fonts.ui)
 
     -- Try cached index, or build via C-side indexer
@@ -151,9 +156,8 @@ function plugin.onEnter(path)
         end
         display.refresh(2)
 
-        -- C-side: streams file, word-wraps with font measurement, returns offsets
-        local offsets = text.indexPages(fonts.reader or fonts.ui, path,
-            viewport.w, viewport.lines_per_page)
+        -- C-side: queries layout engine for width/linesPerPage internally
+        local offsets = text.indexPages(fonts.reader or fonts.ui, path)
 
         if offsets then
             page_offsets = offsets
