@@ -94,29 +94,6 @@ local STYLE_ITALIC = 2
 local STYLE_CODE   = 3
 local STYLE_LINK   = 4
 
---- Load a header font by size, render text, then restore reader font.
--- Returns the loaded font id (caller must unload after drawing).
-local function load_header_font(size)
-    local family = settings.get("fontFamily", "NotoSans")
-    local path = "/fonts/" .. family .. "/" .. family .. "-" .. size .. "-Regular.cfont"
-    local hfid = font.load(path)
-    if not hfid then
-        -- Fallback: try NotoSans
-        path = "/fonts/NotoSans/NotoSans-" .. size .. "-Regular.cfont"
-        hfid = font.load(path)
-    end
-    return hfid
-end
-
--- Header size mapping
-local header_font_size = {
-    h1 = "18",
-    h2 = "16",
-    h3 = nil,   -- use reader font (no swap)
-    h4 = "12",
-    h5 = nil,   -- use reader font (no swap)
-}
-
 local function render()
     if total_pages == 0 then return end
 
@@ -128,21 +105,13 @@ local function render()
     local fid = fonts.reader or fonts.ui
     local lh = viewport.line_height
     local y = viewport.y
-    local bq_start_y = nil
+    local bq_start_y = nil  -- track blockquote start for border
 
     -- C does all the heavy lifting: parse, strip, wrap, span.
-    -- Request more lines than needed — we stop drawing when y exceeds viewport.
-    -- This ensures no text gaps between pages.
-    local max_y = viewport.y + viewport.h
-    local stopped = false
+    -- We just draw.
     text.renderMarkdownPage(fid, file_path, offset,
-        viewport.w, viewport.lines_per_page + 10, in_code,
+        viewport.w, viewport.lines_per_page, in_code,
         function(block_type, line_text, spans, indent)
-            if stopped then return end
-            if y + viewport.line_height > max_y then
-                stopped = true
-                return
-            end
 
             local x = viewport.x
 
@@ -191,72 +160,40 @@ local function render()
                 x = viewport.x + indent_px
             end
 
-            -- Header handling: hot-swap font, 2-line height for h1/h2
-            local is_header = block_type == "h1" or block_type == "h2" or
-                              block_type == "h3" or block_type == "h4" or block_type == "h5"
-            local hfid = nil
-            local draw_fid = fid
-            local header_size = header_font_size[block_type]
-
-            if is_header and header_size then
-                hfid = load_header_font(header_size)
-                if hfid then draw_fid = hfid end
-            end
-
             -- Render spans
             local draw_x = x
             for _, span in ipairs(spans) do
                 local s = span.style
                 local t = span.text
                 if t and t ~= "" then
-                    local w = display.getTextWidth(draw_fid, t)
+                    local w = display.getTextWidth(fid, t)
 
-                    if is_header then
-                        if block_type == "h5" then
-                            -- H5: italic + underline, body size
-                            display.drawText(draw_fid, draw_x, y, t)
-                            display.drawLine(draw_x, y + lh - 2, draw_x + w, y + lh - 2)
-                        else
-                            -- H1-H4: bold (double-strike)
-                            display.drawText(draw_fid, draw_x, y, t)
-                            display.drawText(draw_fid, draw_x + 1, y, t)
-                        end
-                    elseif s == STYLE_BOLD then
-                        display.drawText(draw_fid, draw_x, y, t)
-                        display.drawText(draw_fid, draw_x + 1, y, t)
+                    if block_type == "h1" or block_type == "h2" or block_type == "h3" or s == STYLE_BOLD then
+                        display.drawText(fid, draw_x, y, t)
+                        display.drawText(fid, draw_x + 1, y, t)
                     elseif s == STYLE_ITALIC then
-                        display.drawText(draw_fid, draw_x, y, t)
+                        display.drawText(fid, draw_x, y, t)
                         display.drawLine(draw_x, y + lh - 2, draw_x + w, y + lh - 2)
                     elseif s == STYLE_CODE then
                         display.drawRect(draw_x - 2, y - 1, w + 4, lh + 2)
-                        display.drawText(draw_fid, draw_x, y, t)
+                        display.drawText(fid, draw_x, y, t)
                     elseif s == STYLE_LINK then
-                        display.drawText(draw_fid, draw_x, y, t)
+                        display.drawText(fid, draw_x, y, t)
                         display.drawLine(draw_x, y + lh - 2, draw_x + w, y + lh - 2)
                     else
-                        display.drawText(draw_fid, draw_x, y, t)
+                        display.drawText(fid, draw_x, y, t)
                     end
 
                     draw_x = draw_x + w
                 end
             end
 
-            -- Unload hot-swapped header font
-            if hfid then
-                font.unload(hfid)
-            end
-
-            -- H1: underline
-            if block_type == "h1" then
+            -- Header underline
+            if block_type == "h1" or block_type == "h2" then
                 display.drawLine(viewport.x, y + lh - 1, viewport.x + viewport.w, y + lh - 1)
             end
 
-            -- H1/H2: 2-line height, others: 1-line
-            if block_type == "h1" or block_type == "h2" then
-                y = y + lh * 2
-            else
-                y = y + lh
-            end
+            y = y + lh
         end
     )
 

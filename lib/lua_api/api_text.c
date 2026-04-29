@@ -602,27 +602,19 @@ static int detect_block_type(const char *line, int len, int *content_start, int 
         if (dashes >= 3 || stars >= 3 || underscores >= 3) return 5;
     }
 
-    /* Headers — check longest match first */
+    /* Headers */
     if (line[0] == '#') {
-        if (len >= 6 && line[1] == '#' && line[2] == '#' && line[3] == '#' && line[4] == '#' && line[5] == ' ') {
-            *content_start = 6;
-            return 10;  /* h5 */
-        }
-        if (len >= 5 && line[1] == '#' && line[2] == '#' && line[3] == '#' && line[4] == ' ') {
-            *content_start = 5;
-            return 9;  /* h4 */
-        }
-        if (len >= 4 && line[1] == '#' && line[2] == '#' && line[3] == ' ') {
+        if (len >= 4 && line[0] == '#' && line[1] == '#' && line[2] == '#' && line[3] == ' ') {
             *content_start = 4;
-            return 3;  /* h3 */
+            return 3;
         }
-        if (len >= 3 && line[1] == '#' && line[2] == ' ') {
+        if (len >= 3 && line[0] == '#' && line[1] == '#' && line[2] == ' ') {
             *content_start = 3;
-            return 2;  /* h2 */
+            return 2;
         }
-        if (len >= 2 && line[1] == ' ') {
+        if (len >= 2 && line[0] == '#' && line[1] == ' ') {
             *content_start = 2;
-            return 1;  /* h1 */
+            return 1;
         }
     }
 
@@ -797,11 +789,6 @@ static int l_text_index_markdown_pages(lua_State *L) {
                 /* hr */
                 block_lines = 1;
             } else {
-                /* H1/H2 take 2 display lines, everything else takes 1 per wrapped line */
-                if (block_type == 1 || block_type == 2) {
-                    block_lines += 1;  /* extra line for header height */
-                }
-
                 /* Reduce width for indented blocks */
                 if (block_type == 6) avail_w -= (indent + 1) * 20;  /* list */
                 if (block_type == 7) avail_w -= 20;  /* blockquote */
@@ -811,7 +798,10 @@ static int l_text_index_markdown_pages(lua_State *L) {
                 const char *content = line_buf + content_start;
                 int content_len = full_len - content_start;
                 int stripped_len = strip_markdown(content, content_len, stripped, MAX_LINE_BYTES);
-                block_lines += wrap_line(font_id, stripped, stripped_len, avail_w, NULL, NULL);
+                block_lines = wrap_line(font_id, stripped, stripped_len, avail_w, NULL, NULL);
+
+                /* Headers get extra spacing */
+                if (block_type == 1 || block_type == 2) block_lines += 1;
             }
             } /* end non-code block */
 
@@ -1057,7 +1047,7 @@ static void collect_wrapped(const char *line, int len, void *ctx) {
 
 static const char *type_names[] = {
     "paragraph", "h1", "h2", "h3", "code_fence", "hr",
-    "list", "blockquote", "blank", "h4", "h5"
+    "list", "blockquote", "blank"
 };
 
 /**
@@ -1070,7 +1060,7 @@ static void emit_to_lua(lua_State *L, int cb_ref, int block_type,
 
     /* Arg 1: block type */
     int bt = is_code ? 4 : block_type;
-    lua_pushstring(L, (bt >= 0 && bt <= 10) ? type_names[bt] : "paragraph");
+    lua_pushstring(L, (bt >= 0 && bt <= 8) ? type_names[bt] : "paragraph");
 
     /* Arg 2: line text */
     lua_pushlstring(L, line, len);
@@ -1243,8 +1233,12 @@ static int l_text_render_markdown_page(lua_State *L) {
             continue;
         }
 
-        /* No artificial header spacing — headers use their 2-line height
-         * for visual separation. Blank lines in source provide spacing. */
+        /* Header extra spacing */
+        if ((block_type == 1 || block_type == 2) && lines_emitted > 0) {
+            emit_to_lua(L, cb_ref, 8, "", 0, 0, false);
+            lines_emitted++;
+            if (lines_emitted >= lines_per_page) break;
+        }
 
         /* Get content text */
         const char *content = line_buf + content_start;

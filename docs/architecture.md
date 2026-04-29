@@ -4,8 +4,7 @@
 
 CrossLua Reader splits the firmware into two layers:
 
-1. **Native C runtime** (\~500KB in flash) — hardware access, rendering, Lua interpreter
-
+1. **Native C runtime** (~500KB in flash) — hardware access, rendering, Lua interpreter
 2. **Lua plugins** (on SD card) — all application logic, UI, readers, network features
 
 The C runtime never changes during normal use. All extensibility happens through Lua scripts on the SD card.
@@ -92,7 +91,7 @@ CrossLuaReader/
 
 ### Main Loop
 
-```
+```c
 while (1) {
     hal_gpio_poll();                    // Update button states
     plugin_manager_dispatch_loop();     // Call active plugin's loop()
@@ -103,7 +102,7 @@ while (1) {
 
 ### Plugin Switching
 
-```
+```c
 // When a plugin requests navigation to another plugin:
 plugin_manager_switch("epub_reader", "/books/torah.epub");
 
@@ -119,38 +118,39 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 
 ### Measured
 
-| Phase                              | Flash        | RAM          | What                                                                                                                |
-| ---------------------------------- | ------------ | ------------ | ------------------------------------------------------------------------------------------------------------------- |
-| 1 - HAL + renderer                 | 376KB (5.7%) | 68KB (20.9%) | Hardware, pixels                                                                                                    |
-| 2 - Font system                    | 396KB (6.0%) | 71KB (21.7%) | .cfont, loader, cache, renderer, BiDi                                                                               |
-| 3 - Lua interpreter                | 552KB (8.4%) | 71KB (21.7%) | Lua 5.4 + all API bindings                                                                                          |
-| 4 - Plugin manager                 | 554KB (8.5%) | 75KB (22.9%) | Discovery, lifecycle, switching                                                                                     |
-| 5 - Core UI plugins                | 555KB (8.5%) | 75KB (22.9%) | Home, browser, settings + renderer additions                                                                        |
-| 6 - Settings & persistence         | 562KB (8.6%) | 75KB (22.9%) | Settings, fonts, progress, sleep, physical button bar, content area                                                 |
-| 7 - Font fallback & language packs | 564KB (8.6%) | 75KB (22.9%) | Per-slot font fallback, language pack discovery, UI translation                                                     |
-| 8 - Sleep screen & error recovery  | 568KB (8.7%) | 77KB (23.6%) | Boot font, crash screen, BMP wallpapers, SD reload, USB detection                                                   |
-| Optimizations                      | 568KB (8.7%) | 75KB (22.8%) | On-demand glyphs, C-side discovery, 3 font slots, cache 48, X4 framebuffer, zero-alloc wallpapers, no coroutine lib |
+| Phase | Flash | RAM | What |
+|-------|-------|-----|------|
+| 1 - HAL + renderer | 376KB (5.7%) | 68KB (20.9%) | Hardware, pixels |
+| 2 - Font system | 396KB (6.0%) | 71KB (21.7%) | .cfont, loader, cache, renderer, BiDi |
+| 3 - Lua interpreter | 552KB (8.4%) | 71KB (21.7%) | Lua 5.4 + all API bindings |
+| 4 - Plugin manager | 554KB (8.5%) | 75KB (22.9%) | Discovery, lifecycle, switching |
+| 5 - Core UI plugins | 555KB (8.5%) | 75KB (22.9%) | Home, browser, settings + renderer additions |
+| 6 - Settings & persistence | 562KB (8.6%) | 75KB (22.9%) | Settings, fonts, progress, sleep, physical button bar, content area |
+| 7 - Font fallback & language packs | 564KB (8.6%) | 75KB (22.9%) | Per-slot font fallback, language pack discovery, UI translation |
+| 8 - Sleep screen & error recovery | 568KB (8.7%) | 77KB (23.6%) | Boot font, crash screen, BMP wallpapers, SD reload, USB detection |
+| Optimizations | 568KB (8.7%) | 75KB (22.8%) | On-demand glyphs, C-side discovery, 3 font slots, cache 48, X4 framebuffer, zero-alloc wallpapers, no coroutine lib |
 
-**Runtime free heap: 89KB available for plugins** (measured with home plugin active). **Plugin discovery: 12ms** (C-side string parsing, no Lua states created).
+**Runtime free heap: 89KB available for plugins** (measured with home plugin active).
+**Plugin discovery: 12ms** (C-side string parsing, no Lua states created).
 
 ### Projected (full runtime with Lua + fonts)
 
-| Region                 | Size         | Usage                                        |
-| ---------------------- | ------------ | -------------------------------------------- |
-| Flash                  | ~554KB       | C runtime + Lua interpreter + plugin manager |
-| DRAM                   | ~380KB total |                                              |
-| — Arduino/ESP-IDF base | ~68KB        | Measured Phase 1 baseline                    |
-| — Lua state            | ~80-90KB     | Interpreter + libs + script tables           |
-| — Boot font metadata   | ~8KB         | Intervals + kerning (on-demand glyphs)       |
-| — Framebuffer          | 48KB         | Single e-ink buffer (X4-only, inside SDK)    |
-| — Font bitmap cache    | ~5KB         | LRU decompressed glyph groups (3 slots)      |
-| — WiFi (when active)   | ~50KB        | TCP/IP stack                                 |
-| — Available            | ~89KB        | Plugin working memory (measured)             |
-| SD card                | 32GB+        | Fonts, plugins, books, cache                 |
+| Region | Size | Usage |
+|--------|------|-------|
+| Flash | ~554KB | C runtime + Lua interpreter + plugin manager |
+| DRAM | ~380KB total | |
+| — Arduino/ESP-IDF base | ~68KB | Measured Phase 1 baseline |
+| — Lua state | ~80-90KB | Interpreter + libs + script tables |
+| — Boot font metadata | ~8KB | Intervals + kerning (on-demand glyphs) |
+| — Framebuffer | 48KB | Single e-ink buffer (X4-only, inside SDK) |
+| — Font bitmap cache | ~5KB | LRU decompressed glyph groups (3 slots) |
+| — WiFi (when active) | ~50KB | TCP/IP stack |
+| — Available | **~89KB** | Plugin working memory (measured) |
+| SD card | 32GB+ | Fonts, plugins, books, cache |
 
 ## Font System
 
-Fonts are stored as `.cfont` binary files on the SD card. The font system uses on-demand glyph loading: only the binary search index (intervals), compression groups, kerning tables, and ligature pairs are loaded into RAM. Glyph metrics (the largest section — 14 bytes × glyph count) stay on SD and are read through a 48-entry LRU cache per font slot. This reduces per-font RAM from \~25-31KB to \~2-8KB. The bitmap cache separately handles glyph image decompression on demand.
+Fonts are stored as `.cfont` binary files on the SD card. The font system uses on-demand glyph loading: only the binary search index (intervals), compression groups, kerning tables, and ligature pairs are loaded into RAM. Glyph metrics (the largest section — 14 bytes × glyph count) stay on SD and are read through a 48-entry LRU cache per font slot. This reduces per-font RAM from ~25-31KB to ~2-8KB. The bitmap cache separately handles glyph image decompression on demand.
 
 ### Font Fallback
 
@@ -163,29 +163,24 @@ Fallback is configured from Lua via `font.setFallback(primaryId, fallbackId)`. T
 ### Language Packs
 
 Drop-in folders at `/languages/{code}/` on the SD card. Each contains:
-
 - `lang.json` — metadata (name, direction, font family) and UI string translations
-
 - `fonts/` — script-specific .cfont files (e.g., NotoSansHebrew)
 
 The settings plugin auto-discovers language packs. The `lib/lang.lua` module provides `lang.tr(key)` for translated UI strings with English fallback.
 
-See `docs/language-packs.md` for the full specification. See `docs/font-packs.md` for how to create and install font packs. See `docs/cfont-format.md` for the binary font format specification.
+See `docs/language-packs.md` for the full specification.
+See `docs/font-packs.md` for how to create and install font packs.
+See `docs/cfont-format.md` for the binary font format specification.
 
 ## Sleep Screen
 
 A boot font (NotoSans-12) is loaded in C at startup (font slot 0) before any Lua runs. This enables text rendering for crash screens and sleep overlays without depending on Lua.
 
 Sleep screen modes (set via `system.setSleepMode()` from Lua):
-
 - **Blank** — clear screen to white
-
 - **Single** — show a specific BMP wallpaper from `/wallpapers/`
-
 - **Cycle** — show wallpapers in order, advancing each sleep
-
 - **Random** — random pick from `/wallpapers/`
-
 - **Clear** — keep current page content, overlay "SLEEP" + battery %
 
 The BMP decoder (`lib/renderer/bmp_decoder.c`) streams images from SD row-by-row with Bayer 4x4 ordered dithering for 24-bit→1-bit conversion. No full-image allocation.
@@ -201,9 +196,7 @@ When `plugin.loop()` raises a Lua error, the plugin manager catches it via `lua_
 ## Power Button
 
 - **Short press** (0.5-2s): Enter deep sleep with sleep screen
-
 - **Long press** (>2s): Re-initialize SD card and restart plugins from home (SD hot-swap reload)
-
 - **Auto-sleep**: Configurable timeout, auto-suppressed when USB is connected
 
 ## Plugin API
@@ -213,21 +206,13 @@ See `build_spec.md` for the complete Lua API surface (display, input, storage, w
 ## Relationship to CrossPoint
 
 CrossLua Reader is inspired by and built on hardware knowledge from CrossPoint Reader. Key things carried forward:
-
 - Hardware driver understanding (e-ink timing, button mapping, SD SPI)
-
 - Font rendering approach (2-bit compressed bitmaps, LRU cache)
-
 - BiDi/RTL text handling
-
 - The open-x4-sdk submodule
 
 Key things changed:
-
 - C++ → pure C
-
 - Monolithic → plugin architecture
-
 - Compiled fonts → SD-loadable .cfont files
-
 - All application logic → Lua scripts
