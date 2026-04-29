@@ -713,6 +713,7 @@ static int l_text_index_markdown_pages(lua_State *L) {
     uint32_t file_offset = 0;
     int display_lines = 0;
     bool in_code = false;
+    bool prev_blank = false;
 
     while (file_offset < file_size) {
         int read_len = (int)(file_size - file_offset);
@@ -783,12 +784,15 @@ static int l_text_index_markdown_pages(lua_State *L) {
             int block_type = detect_block_type(line_buf, full_len, &content_start, &indent);
 
             if (block_type == 8) {
-                /* blank */
-                block_lines = 1;
+                /* blank — collapse consecutive */
+                if (!prev_blank) block_lines = 1;
+                prev_blank = true;
             } else if (block_type == 5) {
+                prev_blank = false;
                 /* hr */
                 block_lines = 1;
             } else {
+                prev_blank = false;
                 /* Reduce width for indented blocks */
                 if (block_type == 6) avail_w -= (indent + 1) * 20;  /* list */
                 if (block_type == 7) avail_w -= 20;  /* blockquote */
@@ -800,8 +804,7 @@ static int l_text_index_markdown_pages(lua_State *L) {
                 int stripped_len = strip_markdown(content, content_len, stripped, MAX_LINE_BYTES);
                 block_lines = wrap_line(font_id, stripped, stripped_len, avail_w, NULL, NULL);
 
-                /* Headers get extra spacing */
-                if (block_type == 1 || block_type == 2) block_lines += 1;
+                /* No artificial header spacing */
             }
             } /* end non-code block */
 
@@ -1172,6 +1175,7 @@ static int l_text_render_markdown_page(lua_State *L) {
 
     const char *p = buf;
     const char *end = buf + safe;
+    bool prev_blank = false;  /* collapse consecutive blank lines */
 
     while (p < end && lines_emitted < lines_per_page) {
         /* Extract one source line */
@@ -1217,13 +1221,17 @@ static int l_text_render_markdown_page(lua_State *L) {
         int content_start = 0, indent = 0;
         int block_type = detect_block_type(line_buf, line_len, &content_start, &indent);
 
-        /* Blank line */
+        /* Blank line — collapse consecutive blanks to one */
         if (block_type == 8) {
-            emit_to_lua(L, cb_ref, 8, "", 0, 0, false);
-            lines_emitted++;
+            if (!prev_blank) {
+                emit_to_lua(L, cb_ref, 8, "", 0, 0, false);
+                lines_emitted++;
+            }
+            prev_blank = true;
             p = nl ? (nl + 1) : end;
             continue;
         }
+        prev_blank = false;
 
         /* HR */
         if (block_type == 5) {
@@ -1233,12 +1241,7 @@ static int l_text_render_markdown_page(lua_State *L) {
             continue;
         }
 
-        /* Header extra spacing */
-        if ((block_type == 1 || block_type == 2) && lines_emitted > 0) {
-            emit_to_lua(L, cb_ref, 8, "", 0, 0, false);
-            lines_emitted++;
-            if (lines_emitted >= lines_per_page) break;
-        }
+        /* No artificial header spacing — content follows immediately */
 
         /* Get content text */
         const char *content = line_buf + content_start;
