@@ -94,14 +94,14 @@ local STYLE_ITALIC = 2
 local STYLE_CODE   = 3
 local STYLE_LINK   = 4
 
---- Load a header font by size, render text, then restore reader font.
--- Returns the loaded font id (caller must unload after drawing).
+--- Try to load a header font into a free slot.
+-- Does NOT unload any existing fonts — only uses free slots.
+-- Returns font id or nil if no slot available.
 local function load_header_font(size)
     local family = settings.get("fontFamily", "NotoSans")
     local path = "/fonts/" .. family .. "/" .. family .. "-" .. size .. "-Regular.cfont"
     local hfid = font.load(path)
     if not hfid then
-        -- Fallback: try NotoSans
         path = "/fonts/NotoSans/NotoSans-" .. size .. "-Regular.cfont"
         hfid = font.load(path)
     end
@@ -116,6 +116,10 @@ local header_font_size = {
     h4 = "12",
     h5 = nil,   -- use reader font (no swap)
 }
+
+-- Cached header font for current page render
+local page_header_fid = nil
+local page_header_size = nil
 
 local function render()
     if total_pages == 0 then return end
@@ -191,16 +195,31 @@ local function render()
                 x = viewport.x + indent_px
             end
 
-            -- Header handling: hot-swap font, 2-line height for h1/h2
+            -- Header handling
             local is_header = block_type == "h1" or block_type == "h2" or
                               block_type == "h3" or block_type == "h4" or block_type == "h5"
-            local hfid = nil
             local draw_fid = fid
-            local header_size = header_font_size[block_type]
+            local want_size = header_font_size[block_type]
 
-            if is_header and header_size then
-                hfid = load_header_font(header_size)
-                if hfid then draw_fid = hfid end
+            -- Try to load header font (reuse if same size as last header)
+            if is_header and want_size then
+                if page_header_fid and page_header_size == want_size then
+                    draw_fid = page_header_fid
+                else
+                    -- Unload previous header font if different size
+                    if page_header_fid then
+                        font.unload(page_header_fid)
+                        page_header_fid = nil
+                        page_header_size = nil
+                    end
+                    local hfid = load_header_font(want_size)
+                    if hfid then
+                        page_header_fid = hfid
+                        page_header_size = want_size
+                        draw_fid = hfid
+                    end
+                    -- If load fails, draw_fid stays as reader font (graceful fallback)
+                end
             end
 
             -- Render spans
@@ -214,7 +233,7 @@ local function render()
                     if is_header then
                         if block_type == "h5" then
                             -- H5: italic + underline, body size
-                            display.drawText(draw_fid, draw_x, y, t)
+                            display.drawText(fid, draw_x, y, t)
                             display.drawLine(draw_x, y + lh - 2, draw_x + w, y + lh - 2)
                         else
                             -- H1-H4: bold (double-strike)
@@ -222,28 +241,23 @@ local function render()
                             display.drawText(draw_fid, draw_x + 1, y, t)
                         end
                     elseif s == STYLE_BOLD then
-                        display.drawText(draw_fid, draw_x, y, t)
-                        display.drawText(draw_fid, draw_x + 1, y, t)
+                        display.drawText(fid, draw_x, y, t)
+                        display.drawText(fid, draw_x + 1, y, t)
                     elseif s == STYLE_ITALIC then
-                        display.drawText(draw_fid, draw_x, y, t)
+                        display.drawText(fid, draw_x, y, t)
                         display.drawLine(draw_x, y + lh - 2, draw_x + w, y + lh - 2)
                     elseif s == STYLE_CODE then
                         display.drawRect(draw_x - 2, y - 1, w + 4, lh + 2)
-                        display.drawText(draw_fid, draw_x, y, t)
+                        display.drawText(fid, draw_x, y, t)
                     elseif s == STYLE_LINK then
-                        display.drawText(draw_fid, draw_x, y, t)
+                        display.drawText(fid, draw_x, y, t)
                         display.drawLine(draw_x, y + lh - 2, draw_x + w, y + lh - 2)
                     else
-                        display.drawText(draw_fid, draw_x, y, t)
+                        display.drawText(fid, draw_x, y, t)
                     end
 
                     draw_x = draw_x + w
                 end
-            end
-
-            -- Unload hot-swapped header font
-            if hfid then
-                font.unload(hfid)
             end
 
             -- H1: underline
@@ -264,6 +278,13 @@ local function render()
     if bq_start_y then
         display.drawLine(viewport.x + 4, bq_start_y, viewport.x + 4, y)
         display.drawLine(viewport.x + 5, bq_start_y, viewport.x + 5, y)
+    end
+
+    -- Unload any cached header font from this page
+    if page_header_fid then
+        font.unload(page_header_fid)
+        page_header_fid = nil
+        page_header_size = nil
     end
 
     reader_utils.draw_page_chrome(fonts.ui or fid, current_page, total_pages, title)
