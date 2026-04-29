@@ -363,19 +363,32 @@ Convenience: body width with margins.
 ### layout.bodyHeight() → int
 Convenience: body height with margins.
 
-**Example:**
+**Example — Reader plugin setup:**
 ```lua
--- Reader setup
+-- Configure layout for reader mode (no header, status bar footer)
 layout.setHeaderHeight(0)
 layout.setFooterHeight(40)
-layout.setMargin(10)
+layout.setMargin(settings.get("screenMargin", 10))
 layout.setFont(fonts.reader)
-system.log("Lines per page: " .. layout.linesPerPage())
 
--- App setup
+-- Query body area for text positioning
+local bx, by, bw, bh = layout.bodyArea()
+local lh = layout.lineHeight()
+local lpp = layout.linesPerPage()
+
+-- Query footer area for status bar positioning
+local fx, fy, fw, fh = layout.footerArea()
+display.drawLine(fx, fy, fx + fw, fy)  -- separator at top of footer
+display.drawText(font, fx + 20, fy + 8, "1/42")
+```
+
+**Example — App plugin setup:**
+```lua
+-- Configure layout for app mode (header + footer)
 layout.setHeaderHeight(84)
 layout.setFooterHeight(40)
 layout.setMargin(20)
+
 local bx, by, bw, bh = layout.bodyArea()
 -- Draw menu items within bx, by, bw, bh
 ```

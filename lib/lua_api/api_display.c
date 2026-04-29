@@ -17,6 +17,7 @@
 #include "renderer.h"
 #include "font_manager.h"
 #include "font_render.h"
+#include "layout_engine.h"
 #include "logging.h"
 
 /* display.clear(color) — color: 0xFF=white, 0x00=black. Default white. */
@@ -166,6 +167,8 @@ static int l_display_draw_text_inverted(lua_State *L) {
 static int l_display_set_orientation(lua_State *L) {
     int orient = (int)lua_tonumber(L, 1);
     renderer_set_orientation((orientation_t)orient);
+    /* Keep layout engine in sync so body/footer regions match new dimensions */
+    layout_set_orientation((orientation_t)orient);
     return 0;
 }
 

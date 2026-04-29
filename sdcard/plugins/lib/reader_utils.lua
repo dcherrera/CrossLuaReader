@@ -1,5 +1,5 @@
 -- reader_utils.lua — Shared reader infrastructure for CrossLua Reader.
--- Page turn handling, progress, viewport, refresh management.
+-- Page turn handling, progress, refresh management.
 -- Used by TXT, MD, and EPUB reader plugins.
 
 local settings = require("lib.settings")
@@ -7,42 +7,12 @@ local progress = require("lib.progress")
 local status_bar = require("lib.status_bar")
 local buttons = require("lib.buttons")
 local ui = require("lib.ui")
-local theme = require("lib.theme")
 
 local M = {}
 
 -- Refresh cycle tracking
 local pages_since_refresh = 0
 local last_saved_page = -1
-
---- Calculate the reader viewport bounds.
--- Accounts for content area, screen margins, and status bar.
--- @param font_id Reader font ID
--- @return Table: {x, y, w, h, lines_per_page, line_height}
-function M.get_viewport(font_id)
-    local t = theme.get()
-    local cx, cy, cw, ch = display.contentArea()
-    local margin = settings.get("screenMargin", 10)
-    local line_height = display.getLineHeight(font_id)
-    local status_h = t.button_hints_height
-
-    local x = cx + margin
-    local y = cy + margin
-    local w = cw - 2 * margin
-    local h = ch - 2 * margin - status_h
-
-    local lines_per_page = math.floor(h / line_height)
-    if lines_per_page < 1 then lines_per_page = 1 end
-
-    return {
-        x = x,
-        y = y,
-        w = w,
-        h = h,
-        lines_per_page = lines_per_page,
-        line_height = line_height,
-    }
-end
 
 --- Handle reader input (page turns, back, jumps).
 -- @return Action string: "prev", "next", "back", "jump_prev", "jump_next", or nil

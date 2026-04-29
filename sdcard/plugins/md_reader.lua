@@ -1,6 +1,7 @@
 -- md_reader.lua — Markdown reader for CrossLua Reader.
 -- Uses C-side text.indexMarkdownPages() for fast indexing.
 -- Renders headers, lists, blockquotes, code blocks, bold, italic, links.
+-- Layout engine provides body/footer bounds and line metrics.
 
 local fonts = require("lib.fonts")
 local settings = require("lib.settings")
@@ -240,7 +241,13 @@ function plugin.onEnter(path)
     layout.setMargin(settings.get("screenMargin", 10))
     layout.setFont(fonts.reader or fonts.ui)
 
-    viewport = reader_utils.get_viewport(fonts.reader or fonts.ui)
+    -- Query layout engine directly — matches C-side indexer values
+    local bx, by, bw, bh = layout.bodyArea()
+    viewport = {
+        x = bx, y = by, w = bw, h = bh,
+        lines_per_page = layout.linesPerPage(),
+        line_height = layout.lineHeight(),
+    }
 
     if not load_cache() then
         display.clear()
