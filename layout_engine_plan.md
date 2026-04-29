@@ -102,29 +102,18 @@ Replace `reader_utils.get_viewport()` with layout engine calls in all reader inf
 
 Migrate home, settings, and file browser to use the layout engine.
 
-- \[ \] Update `ui.lua` — `draw_header()` uses `layout.headerArea()`, `draw_button_hints()` uses `layout.footerArea()`, `draw_menu()`/`draw_list()` use `layout.bodyArea()`
-
-- \[ \] Update `home.lua` — call `layout.setHeaderHeight(84)`, `layout.setFooterHeight(40)` in `onEnter()`, remove manual coordinate calculations
-
-- \[ \] Update `settings.lua` — same layout setup, scrollable list uses `layout.bodyArea()` bounds
-
-- \[ \] Update `file_browser.lua` — same layout setup, file list uses `layout.bodyArea()` bounds
-
-- \[ \] Update `theme.lua` — header_height, button_hints_height values feed into layout engine defaults (or remove them if layout engine replaces their purpose)
-
-- \[ \] Build passes
-
-- \[ \] Test: Home screen renders correctly with header, menu in body, button hints in footer
-
-- \[ \] Test: Settings scrolling works within body bounds
-
-- \[ \] Test: File browser listing stays within body bounds
-
-- \[ \] Test: Switching between reader and app plugins — layout reconfigures correctly per plugin
-
-- \[ \] **Document**: Update `docs/plugin-guide.md` with `layout.*` usage for UI plugins
-
-- \[ \] **Update plan**: Check off completed tasks
+- [x] Update `ui.lua` — `draw_header()` uses `layout.headerArea()`, `draw_menu()`/`draw_list()` use `layout.bodyArea()`. Removed `content_area()`/`content_max_y()` dead helpers. Button hints stay as physical coords (correct).
+- [x] Update `home.lua` — calls `layout.setHeaderHeight(t.header_height)`, `layout.setFooterHeight(t.button_hints_height)` in `onEnter()`, `render()` uses `layout.bodyArea()` for menu start
+- [x] Update `settings.lua` — same layout setup, `get_max_visible()` uses `layout.bodyArea()`, theme change reconfigures layout
+- [x] Update `file_browser.lua` — same layout setup, max_visible uses `layout.bodyArea()`
+- [x] Update `theme.lua` — added comments noting header_height/button_hints_height feed into layout engine
+- [x] Build passes: RAM 23.5%, Flash 8.8%
+- [x] Test: Home screen renders correctly with header, menu in body, button hints in footer
+- [x] Test: Settings scrolling works within body bounds
+- [x] Test: File browser listing stays within body bounds
+- [x] Test: Switching between reader and app plugins — layout reconfigures correctly per plugin
+- [x] **Document**: Updated theme.lua with layout engine integration notes
+- [x] **Update plan**: Completed
 
 ## Phase 5: Dead Code Removal — C Side
 

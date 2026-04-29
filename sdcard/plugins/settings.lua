@@ -1,4 +1,5 @@
 -- settings.lua — Device settings for CrossLua Reader.
+-- Uses layout engine for header/body positioning.
 -- Reads/writes via lib/settings module. Changes apply immediately.
 
 local ui = require("lib.ui")
@@ -96,6 +97,10 @@ local function apply_setting(item, value)
         needs_full_refresh = true
     elseif item.key == "theme" then
         theme.set(value)
+        -- Reconfigure layout for new theme dimensions
+        local t = theme.get()
+        layout.setHeaderHeight(t.header_height)
+        layout.setFooterHeight(t.button_hints_height)
     elseif item.key == "fontFamily" or item.key == "fontSize" then
         fonts.reload_reader()
     elseif item.key == "sleepTimeout" then
@@ -163,6 +168,13 @@ function plugin.onEnter()
     rebuild_display()
 
     fonts.init({skip_reader = true})
+
+    -- Configure layout engine for app mode
+    local t = theme.get()
+    layout.setHeaderHeight(t.header_height)
+    layout.setFooterHeight(t.button_hints_height)
+    layout.setMargin(0)
+
     update_labels()
     selected = 1
     scroll_offset = 0
@@ -171,8 +183,8 @@ end
 
 local function get_max_visible()
     local t = theme.get()
-    local cx, cy, cw, ch = display.contentArea()
-    return math.floor((ch - t.header_height - t.vertical_spacing) / (t.menu_row_height + t.vertical_spacing))
+    local bx, by, bw, bh = layout.bodyArea()
+    return math.floor(bh / (t.menu_row_height + t.vertical_spacing))
 end
 
 function plugin.loop()
@@ -225,10 +237,9 @@ function render()
 
     if fonts.ui then
         ui.draw_header(fonts.ui, lang.tr("settings"))
-        local cx, cy, cw, ch = display.contentArea()
-        local list_y = cy + t.header_height + t.vertical_spacing
+        local bx, by, bw, bh = layout.bodyArea()
         local max_visible = get_max_visible()
-        ui.draw_list(fonts.ui, menu_items, selected, list_y, max_visible, scroll_offset)
+        ui.draw_list(fonts.ui, menu_items, selected, by, max_visible, scroll_offset)
         ui.draw_button_hints(fonts.ui, buttons.get("settings", settings.get("orientation", 0)))
     end
 

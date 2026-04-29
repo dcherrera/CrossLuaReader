@@ -1,4 +1,5 @@
 -- file_browser.lua — SD card file browser for CrossLua Reader.
+-- Uses layout engine for header/body positioning.
 -- Navigate folders, select files to open in reader plugins.
 
 local ui = require("lib.ui")
@@ -65,6 +66,13 @@ end
 
 function plugin.onEnter(path)
     fonts.init({skip_reader = true})
+
+    -- Configure layout engine for app mode
+    local t = theme.get()
+    layout.setHeaderHeight(t.header_height)
+    layout.setFooterHeight(t.button_hints_height)
+    layout.setMargin(0)
+
     current_path = path or "/"
     load_directory(current_path)
     needs_render = true
@@ -73,7 +81,8 @@ end
 function plugin.loop()
     input.poll()
     local t = theme.get()
-    local max_visible = math.floor((display.height() - t.header_height - t.button_hints_height) / t.list_row_height)
+    local bx, by, bw, bh = layout.bodyArea()
+    local max_visible = math.floor(bh / t.list_row_height)
 
     if input.wasPressed(input.DOWN) then
         if selected < #entries then
@@ -150,13 +159,13 @@ function render()
     if fonts.ui then
         ui.draw_header(fonts.ui, current_path)
 
-        local list_y = t.header_height + t.vertical_spacing
-        local max_visible = math.floor((display.height() - t.header_height - t.button_hints_height) / t.list_row_height)
+        local bx, by, bw, bh = layout.bodyArea()
+        local max_visible = math.floor(bh / t.list_row_height)
 
         if #entries == 0 then
-            display.drawText(fonts.ui, t.side_padding, list_y, "No files found")
+            display.drawText(fonts.ui, bx + t.side_padding, by, "No files found")
         else
-            ui.draw_list(fonts.ui, entries, selected, list_y, max_visible, scroll_offset)
+            ui.draw_list(fonts.ui, entries, selected, by, max_visible, scroll_offset)
         end
 
         ui.draw_button_hints(fonts.ui, buttons.get("browser", display.getOrientation()))

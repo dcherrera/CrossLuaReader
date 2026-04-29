@@ -1,6 +1,6 @@
 -- home.lua — CrossLua Reader home screen (Lyra style).
--- This is the default home plugin. Customize by editing or replacing
--- with a template from /templates/.
+-- Uses layout engine for header/body/footer positioning.
+-- Customize by editing or replacing with a template from /templates/.
 
 local ui = require("lib.ui")
 local theme = require("lib.theme")
@@ -43,6 +43,12 @@ function plugin.onEnter()
 
     -- Load fonts (skip reader font — home only uses UI font)
     fonts.init({skip_reader = true})
+
+    -- Configure layout engine for app mode
+    local t = theme.get()
+    layout.setHeaderHeight(t.header_height)
+    layout.setFooterHeight(t.button_hints_height)
+    layout.setMargin(0)  -- UI plugins use theme.side_padding, not layout margins
 
     -- Build menu with translated labels
     menu_items = {
@@ -98,9 +104,8 @@ function render()
     if fonts.ui then
         ui.draw_header(fonts.ui, "CrossLua Reader")
 
-        local cx, cy, cw, ch = display.contentArea()
-        local menu_y = cy + t.header_height + t.vertical_spacing
-        ui.draw_menu(fonts.ui, menu_items, selected, menu_y)
+        local bx, by, bw, bh = layout.bodyArea()
+        ui.draw_menu(fonts.ui, menu_items, selected, by)
 
         ui.draw_button_hints(fonts.ui, buttons.get("home", settings.get("orientation", 0)))
     end

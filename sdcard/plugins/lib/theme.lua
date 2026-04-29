@@ -1,5 +1,7 @@
 -- theme.lua — Shared theme metrics for CrossLua Reader plugins.
 -- Provides Lyra (modern) and Classic layout constants.
+-- header_height and button_hints_height are passed to the layout engine
+-- by each plugin's onEnter(). Remaining values are styling-only.
 
 local M = {}
 

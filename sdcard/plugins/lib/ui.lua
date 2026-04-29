@@ -1,5 +1,5 @@
 -- ui.lua — Shared UI drawing helpers for CrossLua Reader plugins.
--- Uses theme metrics for consistent layout across plugins.
+-- Uses layout engine for spatial bounds, theme for styling constants.
 
 local theme = require("lib.theme")
 local M = {}
@@ -50,45 +50,32 @@ local function draw_text_aligned(font_id, x, y, text, row_x, row_w, padding)
 end
 
 --- Draw the header bar with battery indicator.
--- Uses content area bounds so header stays within usable region.
+-- Uses layout.headerArea() for positioning.
 -- @param font_id Font ID for text
 -- @param title Optional title string (displayed centered)
 function M.draw_header(font_id, title)
     local t = theme.get()
-    local cx, cy, cw, ch = display.contentArea()
+    local hx, hy, hw, hh = layout.headerArea()
 
     -- Battery percentage — opposite side from title in RTL
     local bat = system.batteryPercent()
     local bat_text = bat .. "%"
     local bat_w = display.getTextWidth(font_id, bat_text)
     if is_rtl() then
-        display.drawText(font_id, cx + t.side_padding, cy + t.top_padding, bat_text)
+        display.drawText(font_id, hx + t.side_padding, hy + t.top_padding, bat_text)
     else
-        display.drawText(font_id, math.floor(cx + cw - bat_w - t.side_padding), cy + t.top_padding, bat_text)
+        display.drawText(font_id, math.floor(hx + hw - bat_w - t.side_padding), hy + t.top_padding, bat_text)
     end
 
-    -- Title centered in content area
+    -- Title centered in header area
     if title then
         local tw = display.getTextWidth(font_id, title)
-        display.drawText(font_id, math.floor(cx + (cw - tw) / 2), cy + t.top_padding, title)
+        display.drawText(font_id, math.floor(hx + (hw - tw) / 2), hy + t.top_padding, title)
     end
-end
-
---- Get the content area bounds (excludes physical button bar zone).
--- @return x, y, w, h of usable content region
-function M.content_area()
-    return display.contentArea()
-end
-
---- Get the maximum Y for content.
--- @return Maximum Y coordinate for content
-function M.content_max_y()
-    local cx, cy, cw, ch = display.contentArea()
-    return cy + ch
 end
 
 --- Draw a vertical menu with gray dithered selection highlight.
--- Stops rendering items before the button hint zone.
+-- Stops rendering items before the body area bottom.
 -- @param font_id Font ID for labels
 -- @param items Table of {label=string} entries
 -- @param selected 1-based selected index
@@ -96,16 +83,16 @@ end
 -- @return Y position after the last item
 function M.draw_menu(font_id, items, selected, y_start)
     local t = theme.get()
-    local cx, cy, cw, ch = display.contentArea()
-    local max_y = cy + ch
+    local bx, by, bw, bh = layout.bodyArea()
+    local max_y = by + bh
     local y = y_start
 
     for i, item in ipairs(items) do
         local row_h = t.menu_row_height
         if y + row_h > max_y then break end
 
-        local row_x = cx + t.side_padding
-        local row_w = cw - 2 * t.side_padding
+        local row_x = bx + t.side_padding
+        local row_w = bw - 2 * t.side_padding
 
         if i == selected then
             display.fillRoundedRectGray(row_x, y, row_w, row_h, t.corner_radius)
@@ -130,8 +117,8 @@ end
 -- @return Y position after last visible item
 function M.draw_list(font_id, items, selected, y_start, max_visible, scroll_offset)
     local t = theme.get()
-    local cx, cy, cw, ch = display.contentArea()
-    local max_y = cy + ch
+    local bx, by, bw, bh = layout.bodyArea()
+    local max_y = by + bh
     local y = y_start
     local offset = scroll_offset or 0
 
@@ -140,8 +127,8 @@ function M.draw_list(font_id, items, selected, y_start, max_visible, scroll_offs
         local item = items[idx]
         if not item then break end
 
-        local row_x = cx + t.side_padding
-        local row_w = cw - 2 * t.side_padding
+        local row_x = bx + t.side_padding
+        local row_w = bw - 2 * t.side_padding
         local row_h = t.list_row_height
 
         if y + row_h > max_y then break end
