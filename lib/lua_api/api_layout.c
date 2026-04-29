@@ -3,7 +3,7 @@
  * @brief Lua bindings for the layout engine (layout.* module).
  *        Exposes region setters/getters for Header/Body/Footer.
  *
- * @status Phase 1 — core bindings
+ * @status Complete — Phases 1-6
  * @issues None
  * @todo None
  */

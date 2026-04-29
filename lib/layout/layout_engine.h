@@ -4,7 +4,7 @@
  *        for Header/Body/Footer regions. Single source of truth for
  *        "how many lines fit" and "where does content go."
  *
- * @status Phase 1 — core engine
+ * @status Complete — Phases 1-6
  * @issues None
  * @todo None
  */

@@ -3,7 +3,7 @@
  * @brief Centralized layout engine implementation. Computes Header/Body/Footer
  *        regions from configurable inputs. Single static struct, zero heap.
  *
- * @status Phase 1 — core engine
+ * @status Complete — Phases 1-6
  * @issues None
  * @todo None
  */

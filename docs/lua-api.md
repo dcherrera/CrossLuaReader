@@ -328,6 +328,11 @@ Derive line height from a loaded font's advance_y metric. Recalculates `linesPer
 ### layout.setOrientation(n)
 Set orientation (`0`-`3`). Recalculates all regions for new display dimensions.
 
+### layout.setButtonBar(height)
+Reserve space for the physical button bar in landscape modes. `48` = UI plugins (default, reserves space for button hint labels), `0` = readers (no button hints, reclaims full screen). In portrait, the footer covers the button bar zone. In landscape, the button bar maps to a side edge and must be explicitly reserved.
+
+**Note:** The plugin manager calls `layout.resetDefaults()` automatically before each plugin's `onEnter()`, resetting all layout values including button bar to defaults (48). Readers override with `layout.setButtonBar(0)` in their `onEnter()`.
+
 ### Queries (read-only, authoritative)
 
 ### layout.linesPerPage() → int

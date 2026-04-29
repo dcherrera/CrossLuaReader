@@ -258,10 +258,10 @@ When orientation changes:
 2. **Phase 2**: Update `text.*` API to query layout engine internally
 3. **Phase 3**: Update reader plugins (txt_reader, md_reader) to use `layout.*`
 4. **Phase 4**: Update UI plugins (home, settings, file_browser) to use `layout.*`
-5. **Phase 5**: Remove `reader_utils.get_viewport()`, `display.contentArea()` deprecated in favor of `layout.*`
+5. **Phase 5-6**: Remove `reader_utils.get_viewport()`, `display.contentArea()`, and all old viewport code. Add `layout.setButtonBar()` for landscape button bar reservation. Plugin manager resets layout defaults on plugin switch.
 
-### Backward compatibility
-During migration, `display.contentArea()` continues to work. Plugins can gradually adopt `layout.*` without breaking.
+### Migration complete
+All phases complete. `display.contentArea()` has been fully removed. All plugins use `layout.*` exclusively.
 
 ## Design Principles
 
