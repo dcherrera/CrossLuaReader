@@ -253,7 +253,11 @@ system.setSleepHook(nil)
 ```
 
 ### system.reload()
-Re-initialize the SD card and restart the plugin system from home. Use after SD card hot-swap. Also triggered automatically by holding the power button for >2 seconds.
+Request a deferred SD-card reinit + plugin-system restart from home. Use after SD card hot-swap; the firmware-bundled rescue home calls this from its Confirm handler.
+
+**Deferred semantics (important):** `system.reload()` returns immediately — it sets a flag. The actual `hal_storage_reinit()` + `plugin_manager_reinit()` + restart runs *after* the current `plugin.loop()` (or any other Lua callback) returns and unwinds. This is required for safety: doing the reinit synchronously would `lua_close` the very state the caller is running in. Code after `system.reload()` in the same Lua frame still executes; the reload happens on the next dispatcher tick.
+
+The same pathway is invoked automatically by holding the power button for >2 seconds (handled C-side in `main.cpp`, doesn't go through Lua).
 
 **Example:**
 ```lua
@@ -281,6 +285,11 @@ Returns `false` if either font is not loaded, if IDs are the same, or if it woul
 
 ### font.clearFallback(fontId)
 Remove the fallback font from a slot.
+
+### font.boot() → fontId
+Returns the slot id of the firmware boot font, or `-1` if no boot font is currently loaded. The boot font is loaded once at startup (Ubuntu-12-Regular) — from SD when present, from a firmware-bundled copy in `.rodata` as fallback. This is the only font guaranteed to be available without an SD card, so the firmware-bundled rescue home and any plugin that needs to render text in degraded conditions should use it.
+
+The boot font slot is shared — don't `font.unload()` it.
 
 **Example:**
 ```lua

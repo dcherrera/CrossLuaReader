@@ -80,12 +80,16 @@ CrossLuaReader/
 1. hal_system_init()        → Clock, watchdog, USB CDC
 2. hal_display_init()       → SPI init, e-ink power on
 3. hal_gpio_init()          → Button ISRs registered
-4. hal_storage_init()       → SD card mount
+4. hal_storage_init()       → SD card mount (logs and continues on failure)
 5. hal_power_init()         → Battery ADC, sleep timer
 6. font_cache_init()        → LRU decompression cache
-7. boot_font_load()         → Load Ubuntu-12 into slot 0 (crash/sleep screens)
+7. boot_font_load()         → Try /fonts/Ubuntu/Ubuntu-12-Regular.cfont from SD;
+                               on failure load the firmware-bundled copy from
+                               .rodata. Boot font is always available.
 8. plugin_manager_init()    → Scan /plugins/, parse manifests (C-side, no Lua)
-9. plugin_manager_start()   → Create Lua state, load home plugin
+9. plugin_manager_start()   → Create Lua state, load home plugin from SD;
+                               if home isn't on SD, fall back to firmware-
+                               bundled rescue home.
 10. main_loop()             → Dispatch loop() to active plugin
 ```
 
@@ -129,6 +133,7 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 | 7 - Font fallback & language packs | 564KB (8.6%) | 75KB (22.9%) | Per-slot font fallback, language pack discovery, UI translation |
 | 8 - Sleep screen & error recovery | 568KB (8.7%) | 77KB (23.6%) | Boot font, crash screen, BMP wallpapers, SD reload, USB detection |
 | Optimizations | 568KB (8.7%) | 75KB (22.8%) | On-demand glyphs, C-side discovery, 3 font slots, cache 48, X4 framebuffer, zero-alloc wallpapers, no coroutine lib |
+| 8.5 - Firmware home fallback | 636KB (9.7%) | 77KB (23.5%) | Embedded rescue Lua + embedded boot font (.cfont) in .rodata, plugin-manager fallback, deferred system.reload() |
 
 **Runtime free heap: 89KB available for plugins** (measured with home plugin active).
 **Plugin discovery: 12ms** (C-side string parsing, no Lua states created).
@@ -152,6 +157,14 @@ plugin_manager_switch("epub_reader", "/books/torah.epub");
 
 Fonts are stored as `.cfont` binary files on the SD card. The font system uses on-demand glyph loading: only the binary search index (intervals), compression groups, kerning tables, and ligature pairs are loaded into RAM. Glyph metrics (the largest section — 14 bytes × glyph count) stay on SD and are read through a 48-entry LRU cache per font slot. This reduces per-font RAM from ~25-31KB to ~2-8KB. The bitmap cache separately handles glyph image decompression on demand.
 
+### Embedded fonts (firmware-resident)
+
+A font can also be loaded from a flash buffer instead of the SD card. The boot font ships in firmware via `tools/embed_assets.py`, which converts `sdcard/fonts/Ubuntu/Ubuntu-12-Regular.cfont` into `lib/font/embedded_boot_font.h` as a `const unsigned char[]` array. Use `font_manager_load_buffer(data, len)` to register an embedded font; from Lua, `font.boot()` returns the slot id of whichever copy of the boot font is currently loaded.
+
+`font_data_t` carries an optional `embedded_data` / `embedded_size` pair. When non-NULL, every on-demand read in `font_cache.c` and `font_render.c` (glyph metrics, compressed bitmap groups, uncompressed bitmaps, aligned-offset width-height probes) does a `memcpy` from `embedded_data + offset` instead of opening an SD file. The cache infrastructure is otherwise unchanged — bitmap groups still decompress into the same LRU slots. A `cfont_src_t` abstraction inside `font_loader.c` lets `parse_cfont_body()` populate the metadata identically from either source.
+
+Cost: the embedded `.cfont` lives in `.rodata` (flash), zero DRAM until parsed. Metadata parsed on load is ~1-2 KB of heap, identical to the SD-loaded path. Bitmap decompression still allocates per-group cache slots only when glyphs are actually drawn.
+
 ### Font Fallback
 
 Each font slot can have a fallback font. When a glyph is missing from the primary font, the renderer tries the fallback before falling back to U+FFFD. This enables seamless mixed-script text (e.g., Latin + Hebrew in one `drawText` call).
@@ -174,7 +187,7 @@ See `docs/cfont-format.md` for the binary font format specification.
 
 ## Sleep Screen
 
-A boot font (NotoSans-12) is loaded in C at startup (font slot 0) before any Lua runs. This enables text rendering for crash screens and sleep overlays without depending on Lua.
+A boot font (Ubuntu-12-Regular) is loaded in C at startup (font slot 0) before any Lua runs. This enables text rendering for crash screens, sleep overlays, and the firmware-home rescue UI without depending on Lua. The font is loaded from SD when present, with a firmware-bundled copy in `.rodata` as fallback — see [Firmware Home Fallback](#firmware-home-fallback) below.
 
 Sleep screen modes (set via `system.setSleepMode()` from Lua):
 - **Blank** — clear screen to white
@@ -192,6 +205,56 @@ See `docs/sleep-screen.md` for the full specification.
 ## Error Recovery
 
 When `plugin.loop()` raises a Lua error, the plugin manager catches it via `lua_pcall`, stops the plugin, and shows a crash screen with the plugin name and error message using the boot font. The user presses any button to return to home. This ensures the device never gets stuck on a crashed plugin.
+
+## Firmware Home Fallback
+
+The runtime ships with a minimal rescue UI bundled into firmware so the device always boots to a usable screen, even when the SD card is missing, unmounted, or has no `/plugins/` directory. The premise: SD failure must not produce a black screen.
+
+### What's bundled
+
+Two assets land in `.rodata` (flash) at build time, generated by `tools/embed_assets.py`:
+
+| Source | Generated header | Purpose |
+|--------|------------------|---------|
+| `src/embedded/firmware_home.lua` | `lib/plugin/firmware_home_lua.h` | Rescue UI: "PLEASE INSERT SD" + Reload SD action + Confirm hint cell. No `require()` — uses only the boot font and the core `display.*` / `input.*` / `system.*` / `font.*` APIs. |
+| `sdcard/fonts/Ubuntu/Ubuntu-12-Regular.cfont` | `lib/font/embedded_boot_font.h` | Firmware-resident copy of the boot font, so text can render in the rescue UI when SD itself is the failure. |
+
+Each is emitted as a `const unsigned char[]` plus a `_len` constant. The embed script is idempotent — if the source hasn't changed, the header isn't rewritten and downstream compilation isn't invalidated. Both generated headers are in `.gitignore`; the source files are committed.
+
+### Plugin-manager fallback path
+
+`plugin_manager_start("home", NULL)` is the only call site that triggers the fallback:
+
+1. Resolve target id (saved state → "home" → embedded fallback if no plugins were discovered).
+2. `find_plugin_by_id("home")` — if the SD home is present, normal load proceeds.
+3. If `target_id == "home"` and no SD plugin matches, `start_firmware_home()` runs:
+   - `api_create_state()` builds a fresh Lua state with all stock bindings.
+   - `luaL_loadbuffer` parses `firmware_home_lua[]` with chunkname `=firmware_home`.
+   - The chunk runs (sets the `plugin` global), nav functions register, `plugin.onEnter()` fires.
+   - `active_index = -1` is the sentinel meaning "active plugin is firmware-bundled, not in `plugins[]`." The crash-screen path in `dispatch_loop` guards on this and uses the literal label `"Firmware Home"` instead of indexing `plugins[-1]`.
+
+When the user presses Confirm in the rescue UI, `system.reload()` (see contract below) reinitializes SD and restarts. If the card now mounts and `/plugins/home.lua` is present, the SD home replaces the firmware copy. If not, the rescue UI re-renders.
+
+Boot-font handling mirrors this pattern: `main.cpp` tries `font_manager_load("/fonts/Ubuntu/Ubuntu-12-Regular.cfont")` first; on failure it calls `font_manager_load_buffer(embedded_boot_font, embedded_boot_font_len)`. The embedded copy is only parsed when SD's copy is unavailable, so RAM cost is identical to the SD path in the common case.
+
+### `system.reload()` deferred-reload contract
+
+`system.reload()` (Lua) reinitializes the SD card and restarts the active plugin. The naive implementation closed the running Lua state synchronously, which is a use-after-free: the function is invoked from inside a `lua_pcall` on that very state.
+
+The corrected contract:
+
+1. `l_system_reload()` calls `plugin_manager_request_reload()`, which sets a `reload_pending` flag and returns immediately. The current `plugin.loop()` finishes naturally; the pcall unwinds; control returns to `dispatch_loop`.
+2. At the top of the next `dispatch_loop` tick — *outside* any pcall — the flag is observed. The dispatcher then calls `plugin_manager_stop()` (closes the state cleanly, runs `onExit`), `hal_storage_reinit()`, `plugin_manager_reinit()`, and `plugin_manager_start("home", NULL)`. The new active state may be the SD home or, if SD is still unavailable, another firmware-home instance.
+
+`plugin_manager_request_reload()` is the public API; `plugin_manager_reinit()` remains exposed but is documented as MUST NOT be called from inside a Lua call on the active state. Any future Lua-callable that wants to re-enter the plugin manager should follow this same defer-and-return pattern.
+
+### Bypass behavior
+
+The fallback fires only when SD-side discovery doesn't return a plugin with id `"home"`. If `home.lua` is on SD but errors at parse or in `onEnter`, that's the regular crash-recovery path's problem — the firmware home is not a catch-all crash net, only an SD-availability net.
+
+### Memory accounting
+
+Phase 8.5 adds ~68 KB of flash (~52 KB embedded `.cfont`, ~2.5 KB embedded Lua source, the rest is C-side fallback code). RAM impact when SD is healthy is ~80 bytes — both flash buffers stay in `.rodata` until parsed, and parsing only happens when SD-side loads fail.
 
 ## Power Button
 
