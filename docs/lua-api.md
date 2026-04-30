@@ -442,6 +442,106 @@ display.refresh()
 
 ---
 
+## zip — opt-in, declare `requires = {"zip"}`
+
+ZIP archive reader. Wraps `lib/zip` for SD-resident archives. The handle returned by `zip.open` is a userdata; methods are called via `:` syntax. Handles are GC-collected if you forget to call `:close()`.
+
+### zip.open(path, validate_epub_mimetype = false) → handle | nil, errmsg
+Opens a `.zip` / `.epub` and parses the central directory. When `validate_epub_mimetype=true`, also verifies the OCF magic (first entry must be `mimetype`, STORE method, exact bytes `application/epub+zip`).
+
+### h:close()
+Idempotent. Frees the native handle.
+
+### h:list() → array of names
+All entry names in the central directory.
+
+### h:has(name) → bool
+Existence check by exact name.
+
+### h:size(name) → int
+Uncompressed size of the named entry (0 if not found or empty).
+
+### h:read(name) → string | nil, errmsg
+Read full entry into a Lua string. Capped at 256 KB — for chapters and images use streaming reads via the `epub` module.
+
+### h:drm_state() → "none" | "obfuscation" | "drm"
+Inspects `META-INF/encryption.xml`. `"obfuscation"` = IDPF/Adobe font obfuscation only (book is openable). `"drm"` = real DRM (book must be rejected).
+
+---
+
+## xml — opt-in, declare `requires = {"xml"}`
+
+Streaming XML/HTML SAX parser wrapping expat. Element local names are stripped of namespace URIs; attribute keys keep their literal form (e.g. `epub:type`).
+
+### xml.parse(input, opts, handlers) → bool, errmsg
+Parses an XML or HTML string with callbacks.
+
+- **input**: string (whole document).
+- **opts**: `{ mode = "strict" | "html" }` — strict for OPF/container/NCX, html for NavDoc and chapter XHTML.
+- **handlers**: `{ on_start = function(tag, attrs), on_end = function(tag), on_text = function(text) }` — any field may be `nil`. `attrs` is a table `{ [key] = value }`.
+
+```lua
+xml.parse(text, {mode = "strict"}, {
+    on_start = function(tag, attrs)
+        if tag == "rootfile" then opf_path = attrs["full-path"] end
+    end,
+})
+```
+
+---
+
+## epub — opt-in, declare `requires = {"epub"}`
+
+High-level EPUB book object. Opens a `.epub`, parses container + OPF + TOC, and exposes navigation primitives.
+
+### epub.open(path, cache_dir = "/cache/epub") → book | nil, errcode, errmsg
+Opens a `.epub` and parses its metadata. On failure returns three values: `nil`, an error code string, and a human-readable message.
+
+Possible `errcode` values: `"io_error"`, `"not_epub"`, `"drm"`, `"malformed_container"`, `"malformed_opf"`, `"no_spine"`, `"fixed_layout"`, `"oom"`.
+
+### b:close()
+Idempotent. Frees the parsed structures and underlying ZIP handle.
+
+### b:metadata() → table
+Returns `{title, author, language, identifier, modified, publisher, date_published, description, cover_id, epub_version, page_progression_direction}`. String fields are `nil` if not present in the OPF. `epub_version` is `2` or `3`. `page_progression_direction` is `"ltr"` or `"rtl"`.
+
+### b:manifest_count() / b:manifest_at(i) / b:manifest_lookup(id)
+Manifest item access. `manifest_at` is 1-based. Each item is a table `{id, href, media_type, properties}`. `properties` is the raw EPUB 3 properties string (e.g. `"cover-image nav"`) or `nil`.
+
+### b:spine_count() / b:spine_at(i)
+Spine in linear reading order. 1-based. Each entry is `{idref, href, media_type, linear}` where `href` and `media_type` are pre-resolved from the manifest.
+
+### b:toc() → array of nodes
+Hierarchical TOC. Each node: `{label, href, depth, children}` where `children` is an array of nodes (omitted for leaves). NCX (EPUB 2) and NavDoc (EPUB 3) are both normalized to this shape.
+
+### b:resolve_href(base_href, href) → spine_index, fragment | nil
+Resolve an internal link. `spine_index` is 1-based. `fragment` is the part after `#` (or `nil`). Returns `nil` if the target doesn't match a spine entry.
+
+### b:read_item(href) → string | nil, errmsg
+Read a manifest item to a Lua string (`href` resolved relative to the OPF base path). Capped at 256 KB.
+
+### b:item_size(href) / b:cumulative_size(spine_index)
+Item size lookup; cumulative bytes through the given spine index for percent-progress reporting.
+
+### b:cache_dir() / b:path()
+Strings returned at open time.
+
+```lua
+local book, err = epub.open(path)
+if not book then
+    system.log("open failed: " .. err)
+    return
+end
+local m = book:metadata()
+print(m.title, "by", m.author)
+for i = 1, book:spine_count() do
+    print(i, book:spine_at(i).href)
+end
+book:close()
+```
+
+---
+
 ## Complete Plugin Example
 
 ```lua

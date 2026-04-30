@@ -44,9 +44,11 @@ This is invisible to the user — no EPUB code lands here, just the plumbing tha
 
 ---
 
-## Phase 9.A: Read the container, see metadata (no rendering)
+## Phase 9.A: Read the container, see metadata (no rendering) ✅
 
 **Goal:** Lua can open an EPUB, read its title/author/language, list its spine and TOC. No content rendering yet. Ships `zip.*`, `xml.*`, `epub.*` modules as opt-in capabilities.
+
+**Shipped numbers:** Flash 705,716 → 716,350 (+10,634 bytes for the epub module + bindings on top of 9.A.1's expat/zip/xml load). RAM 78,232 (no change vs Phase 9.0 baseline). The opt-in mechanism delivered exactly its design promise: every binding sits in flash, costs zero DRAM until a plugin declares it.
 
 - [ ] **C-side: ZIP module** (`lib/zip/`)
   - `zip_open(path)` / `zip_close(handle)` — open SD-resident archive, validate EPUB magic per spec §4.1 (mimetype entry first, STORE method, exact bytes).
@@ -363,7 +365,7 @@ Each phase ends with a measured snapshot recorded here:
 | Phase | Flash | Baseline RAM (home active) | Working set RAM (EPUB reading) | Notes |
 |-------|-------|----------------------------|--------------------------------|-------|
 | 9.0 | 637,676 (9.7%) | 78,232 (+1,152 vs Phase 8.5) | n/a | plumbing only; static `caps[6][12]×16` per-plugin metadata is the unavoidable baseline cost — opt-in dispatch keeps subsequent phases free |
-| 9.A | TBD | (matches 9.0 ±200 B) | TBD (~20 KB above baseline) | metadata only |
+| 9.A | 716,350 (10.9%) | 78,232 (+0 vs 9.0) | TBD (~20 KB above baseline) | expat + zip + xml + epub modules; opt-in dispatch keeps baseline RAM exactly flat — bindings live in flash until a plugin declares them |
 | 9.B | TBD | (matches 9.A ±200 B) | TBD (~30 KB above baseline) | text rendering |
 | 9.C | TBD | (matches 9.B ±200 B) | TBD (~35 KB above baseline) | + CSS |
 | 9.D | TBD | (matches 9.C ±200 B) | TBD (~45 KB above baseline) | + images |

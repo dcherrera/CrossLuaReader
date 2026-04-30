@@ -17,6 +17,7 @@
 #include "api_layout.h"
 #include "api_zip.h"
 #include "api_xml.h"
+#include "api_epub.h"
 
 #include "lua.h"
 #include "lualib.h"
@@ -230,6 +231,10 @@ void api_register_capability(lua_State *L, const char *cap) {
     }
     if (strcmp(cap, "xml") == 0) {
         api_xml_register(L);
+        return;
+    }
+    if (strcmp(cap, "epub") == 0) {
+        api_epub_register(L);
         return;
     }
 
