@@ -4,6 +4,8 @@ A Lua-powered firmware runtime for the **Xteink X4** e-paper reader.
 
 **A [TeamIDE](https://teamide.dev) project.**
 
+Join the community on [Discord](https://discord.gg/cN87dEXs) · Follow on [X](https://x.com/TeamIDElab) · Subreddit: [r/TeamIDELabs](https://www.reddit.com/r/TeamIDELabs/).
+
 CrossLua Reader is a C runtime that turns the Xteink X4 into an extensible e-reader platform. The firmware provides hardware drivers, a font renderer, and a Lua 5.4 interpreter. Everything else — readers, menus, network features — runs as Lua plugins loaded from the SD card.
 
 Built on the hardware knowledge from [CrossPoint Reader](https://github.com/crosspoint-reader/crosspoint-reader), rewritten from the ground up in pure C.
