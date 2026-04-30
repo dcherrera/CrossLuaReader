@@ -4,7 +4,7 @@ A Lua-powered firmware runtime for the **Xteink X4** e-paper reader.
 
 **A [TeamIDE](https://teamide.dev) project.**
 
-Join the community on [Discord](https://discord.gg/cN87dEXs) · Follow on [X](https://x.com/TeamIDElab) · Subreddit: [r/TeamIDELabs](https://www.reddit.com/r/TeamIDELabs/).
+Join the community on [Discord](https://discord.gg/cN87dEXs) · Follow on [X](https://x.com/TeamIDElab) · Subreddit: [r/TeamIDELabs](https://www.reddit.com/r/TeamIDELabs/) · YouTube: [@TeamIDElabs](https://www.youtube.com/@TeamIDElabs).
 
 CrossLua Reader is a C runtime that turns the Xteink X4 into an extensible e-reader platform. The firmware provides hardware drivers, a font renderer, and a Lua 5.4 interpreter. Everything else — readers, menus, network features — runs as Lua plugins loaded from the SD card.
 
@@ -14,7 +14,7 @@ Built on the hardware knowledge from [CrossPoint Reader](https://github.com/cros
 
 CrossPoint Reader is an excellent e-reader firmware, but it's a monolithic C++ application. Every feature is compiled into the firmware. Adding new functionality requires C++ embedded development, a PlatformIO toolchain, and a firmware flash.
 
-CrossLua Reader takes a different approach: the firmware is a thin ~500KB runtime, and all application logic lives as Lua scripts on the SD card. No recompilation, no reflashing — just drop a `.lua` file on the SD card:
+CrossLua Reader takes a different approach: the firmware is a compact ~640KB runtime, and all application logic lives as Lua scripts on the SD card. No recompilation, no reflashing — just drop a `.lua` file on the SD card:
 
 - Want to browse Project Gutenberg? Drop `gutenberg.lua` on the SD card.
 - Want to read JSON files? Drop `json_viewer.lua` on the SD card.
@@ -30,7 +30,7 @@ The goal is to let people customize and extend the firmware without ever touchin
 ## Architecture
 
 ```
-SD Card                          Flash (~500KB)
+SD Card                          Flash (~640KB)
 ├── plugins/                     ├── C HAL drivers
 │   ├── epub_reader.lua          ├── Font loader + renderer
 │   ├── txt_reader.lua           ├── Framebuffer renderer
