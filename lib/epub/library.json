@@ -1,0 +1,9 @@
+{
+    "name": "epub",
+    "version": "1.0.0",
+    "dependencies": {
+        "zip": "*",
+        "xml": "*",
+        "logging": "*"
+    }
+}
