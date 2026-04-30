@@ -40,8 +40,8 @@ void api_register_core(lua_State *L);
  * plugin manager once per entry in a plugin's `requires` manifest field.
  * Unknown capability names are logged and ignored (forward compatibility).
  *
- * Currently recognized capability names: "text".
- * Phases 9.A-9.D will add: "zip", "xml", "epub", "css", "image".
+ * Currently recognized capability names: "text", "zip", "xml".
+ * Phases 9.A-9.D will add: "epub", "css", "image".
  *
  * @param L   Lua state
  * @param cap Capability name (NUL-terminated)

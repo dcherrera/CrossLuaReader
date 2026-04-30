@@ -15,6 +15,8 @@
 #include "api_font.h"
 #include "api_text.h"
 #include "api_layout.h"
+#include "api_zip.h"
+#include "api_xml.h"
 
 #include "lua.h"
 #include "lualib.h"
@@ -220,6 +222,14 @@ void api_register_capability(lua_State *L, const char *cap) {
 
     if (strcmp(cap, "text") == 0) {
         api_text_register(L);
+        return;
+    }
+    if (strcmp(cap, "zip") == 0) {
+        api_zip_register(L);
+        return;
+    }
+    if (strcmp(cap, "xml") == 0) {
+        api_xml_register(L);
         return;
     }
 
