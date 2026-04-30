@@ -24,3 +24,6 @@ lib/font/embedded_boot_font.h
 
 # Personal files
 david/
+
+# TeamIDE local chat history
+.teamide/chatHistory/
