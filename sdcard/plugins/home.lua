@@ -1,5 +1,7 @@
--- home.lua — CrossLua Reader home screen (Lyra style).
--- Uses layout engine for header/body/footer positioning.
+-- home.lua — CrossLua Reader home screen.
+-- Two render styles, chosen by settings.homeStyle:
+--   "list"    — single-column list (default, Lyra style)
+--   "biscuit" — 2-column tile grid (subtitle per tile)
 -- Customize by editing or replacing with a template from /templates/.
 
 local ui = require("lib.ui")
@@ -20,6 +22,8 @@ plugin = {
 local selected = 1
 local needs_render = true
 local menu_items = {}
+local home_style = "list"
+local TILE_COLS = 2
 
 function plugin.onEnter()
     -- Load and apply persisted settings
@@ -50,19 +54,48 @@ function plugin.onEnter()
     layout.setFooterHeight(t.button_hints_height)
     layout.setMargin(0)
 
-    -- Build menu with translated labels
+    -- Build menu with translated labels.
+    -- subtitle is only used by the biscuit (tile-grid) renderer.
     menu_items = {
-        { label = lang.tr("continue_reading"), action = "continue" },
-        { label = lang.tr("browse_files"),     action = "browser" },
-        { label = lang.tr("settings"),         action = "settings" },
+        { label = lang.tr("continue_reading"), subtitle = lang.tr("last_book_subtitle"), action = "continue" },
+        { label = lang.tr("browse_files"),     subtitle = lang.tr("browse_files_subtitle"), action = "browser" },
+        { label = lang.tr("settings"),         subtitle = lang.tr("settings_subtitle"),     action = "settings" },
     }
 
+    home_style = settings.get("homeStyle", "list")
     selected = 1
     needs_render = true
 end
 
+-- Movement in the biscuit (tile-grid) layout: UP/DOWN move by row, LEFT/RIGHT
+-- by column. Cells beyond the last item are skipped on Right and clamped on Down.
+local function move_biscuit(dx, dy)
+    local n = #menu_items
+    if n == 0 then return end
+    local idx0 = selected - 1            -- 0-based for math
+    local row = math.floor(idx0 / TILE_COLS)
+    local col = idx0 % TILE_COLS
+    local rows = math.ceil(n / TILE_COLS)
+
+    col = col + dx
+    if col < 0 or col >= TILE_COLS then return end
+    row = row + dy
+    if row < 0 or row >= rows then return end
+
+    local target = row * TILE_COLS + col
+    if target >= n then return end       -- empty trailing cell
+    selected = target + 1
+    needs_render = true
+end
+
 function plugin.loop()
-    if input.wasPressed(input.DOWN) then
+    if home_style == "biscuit" then
+        if input.wasPressed(input.DOWN)  then move_biscuit(0,  1)
+        elseif input.wasPressed(input.UP)    then move_biscuit(0, -1)
+        elseif input.wasPressed(input.LEFT)  then move_biscuit(-1, 0)
+        elseif input.wasPressed(input.RIGHT) then move_biscuit( 1, 0)
+        end
+    elseif input.wasPressed(input.DOWN) then
         if selected < #menu_items then
             selected = selected + 1
             needs_render = true
@@ -72,7 +105,10 @@ function plugin.loop()
             selected = selected - 1
             needs_render = true
         end
-    elseif input.wasPressed(input.CONFIRM) or input.wasPressed(input.RIGHT) then
+    end
+
+    if input.wasPressed(input.CONFIRM) or
+       (home_style == "list" and input.wasPressed(input.RIGHT)) then
         local action = menu_items[selected].action
         if action == "browser" then
             plugin.navigate("file_browser")
@@ -97,6 +133,44 @@ function plugin.loop()
     end
 end
 
+-- Biscuit renderer: 2-column tile grid. Each tile shows a bold-ish title and
+-- a one-line subtitle; selected tile is filled (inverted text). Empty
+-- trailing cells (when item count isn't a multiple of TILE_COLS) are skipped.
+local function render_biscuit_grid(font_id, bx, by, bw, bh)
+    local cols = TILE_COLS
+    local rows = math.ceil(#menu_items / cols)
+    if rows < 1 then return end
+
+    local gap = 8
+    local cell_w = math.floor((bw - gap * (cols + 1)) / cols)
+    local cell_h = math.floor((bh - gap * (rows + 1)) / rows)
+    local lh = display.getLineHeight(font_id)
+
+    for i, item in ipairs(menu_items) do
+        local idx0 = i - 1
+        local r = math.floor(idx0 / cols)
+        local c = idx0 % cols
+        local x = bx + gap + c * (cell_w + gap)
+        local y = by + gap + r * (cell_h + gap)
+
+        if i == selected then
+            display.fillRoundedRect(x, y, cell_w, cell_h, 6)
+            display.drawTextInverted(font_id, x + 12, y + 14, item.label)
+            if item.subtitle and item.subtitle ~= "" then
+                display.drawTextInverted(font_id, x + 12, y + 14 + lh + 2, item.subtitle)
+            end
+        else
+            -- Hollow tile: 2-pixel border for visibility on e-ink.
+            display.drawRect(x,     y,     cell_w,     cell_h)
+            display.drawRect(x + 1, y + 1, cell_w - 2, cell_h - 2)
+            display.drawText(font_id, x + 12, y + 14, item.label)
+            if item.subtitle and item.subtitle ~= "" then
+                display.drawText(font_id, x + 12, y + 14 + lh + 2, item.subtitle)
+            end
+        end
+    end
+end
+
 function render()
     local t = theme.get()
     display.clear()
@@ -105,7 +179,11 @@ function render()
         ui.draw_header(fonts.ui, "CrossLua Reader")
 
         local bx, by, bw, bh = layout.bodyArea()
-        ui.draw_menu(fonts.ui, menu_items, selected, by)
+        if home_style == "biscuit" then
+            render_biscuit_grid(fonts.ui, bx, by, bw, bh)
+        else
+            ui.draw_menu(fonts.ui, menu_items, selected, by)
+        end
 
         ui.draw_button_hints(fonts.ui, buttons.get("home", settings.get("orientation", 0)))
     end
