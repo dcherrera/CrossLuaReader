@@ -55,11 +55,10 @@ function plugin.onEnter()
     layout.setMargin(0)
 
     -- Build menu with translated labels.
-    -- subtitle is only used by the biscuit (tile-grid) renderer.
     menu_items = {
-        { label = lang.tr("continue_reading"), subtitle = lang.tr("last_book_subtitle"), action = "continue" },
-        { label = lang.tr("browse_files"),     subtitle = lang.tr("browse_files_subtitle"), action = "browser" },
-        { label = lang.tr("settings"),         subtitle = lang.tr("settings_subtitle"),     action = "settings" },
+        { label = lang.tr("continue_reading"), action = "continue" },
+        { label = lang.tr("browse_files"),     action = "browser" },
+        { label = lang.tr("settings"),         action = "settings" },
     }
 
     home_style = settings.get("homeStyle", "list")
@@ -133,17 +132,19 @@ function plugin.loop()
     end
 end
 
--- Biscuit renderer: 2-column tile grid. Each tile shows a bold-ish title and
--- a one-line subtitle; selected tile is filled (inverted text). Empty
--- trailing cells (when item count isn't a multiple of TILE_COLS) are skipped.
+-- Biscuit renderer: 2-column tile grid. Title only, no subtitle. Tiles are
+-- top-anchored at a fixed compact height — no stretching to fill the body.
+-- Selected tile is filled (inverted text); unselected tiles have a 2px
+-- hollow border. Empty trailing cells are skipped.
+local TILE_HEIGHT = 70
+
 local function render_biscuit_grid(font_id, bx, by, bw, bh)
     local cols = TILE_COLS
-    local rows = math.ceil(#menu_items / cols)
-    if rows < 1 then return end
+    if #menu_items < 1 then return end
 
     local gap = 8
     local cell_w = math.floor((bw - gap * (cols + 1)) / cols)
-    local cell_h = math.floor((bh - gap * (rows + 1)) / rows)
+    local cell_h = TILE_HEIGHT
     local lh = display.getLineHeight(font_id)
 
     for i, item in ipairs(menu_items) do
@@ -153,20 +154,16 @@ local function render_biscuit_grid(font_id, bx, by, bw, bh)
         local x = bx + gap + c * (cell_w + gap)
         local y = by + gap + r * (cell_h + gap)
 
+        -- Vertical centering of the single label line within the tile.
+        local text_y = y + math.floor((cell_h - lh) / 2)
+
         if i == selected then
             display.fillRoundedRect(x, y, cell_w, cell_h, 6)
-            display.drawTextInverted(font_id, x + 12, y + 14, item.label)
-            if item.subtitle and item.subtitle ~= "" then
-                display.drawTextInverted(font_id, x + 12, y + 14 + lh + 2, item.subtitle)
-            end
+            display.drawTextInverted(font_id, x + 12, text_y, item.label)
         else
-            -- Hollow tile: 2-pixel border for visibility on e-ink.
             display.drawRect(x,     y,     cell_w,     cell_h)
             display.drawRect(x + 1, y + 1, cell_w - 2, cell_h - 2)
-            display.drawText(font_id, x + 12, y + 14, item.label)
-            if item.subtitle and item.subtitle ~= "" then
-                display.drawText(font_id, x + 12, y + 14 + lh + 2, item.subtitle)
-            end
+            display.drawText(font_id, x + 12, text_y, item.label)
         end
     end
 end
