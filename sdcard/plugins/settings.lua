@@ -38,8 +38,8 @@ local menu_items = {
     { key = "sleepTimeout",     label = "", values = {1, 5, 10, 15, 30},  display = {}, display_raw = {"1 min", "5 min", "10 min", "15 min", "30 min"} },
     { key = "sleepMode",        label = "", values = {"blank", "single", "cycle", "random", "clear"},
                                 display = {}, display_keys = {"blank", "wallpaper", "cycle", "random", "stay_on_page"} },
-    { key = "homeStyle",        label = "", values = {"list", "biscuit"},
-                                display = {}, display_raw = {"List", "Biscuit"} },
+    { key = "homeStyle",        label = "", values = {"list", "biscuit_small", "biscuit_large"},
+                                display = {}, display_raw = {"List", "Biscuit Small", "Biscuit Large"} },
 }
 
 -- Rebuild display names from translation keys

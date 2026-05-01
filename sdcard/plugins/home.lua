@@ -87,8 +87,10 @@ local function move_biscuit(dx, dy)
     needs_render = true
 end
 
+local function is_biscuit() return home_style == "biscuit_small" or home_style == "biscuit_large" end
+
 function plugin.loop()
-    if home_style == "biscuit" then
+    if is_biscuit() then
         if input.wasPressed(input.DOWN)  then move_biscuit(0,  1)
         elseif input.wasPressed(input.UP)    then move_biscuit(0, -1)
         elseif input.wasPressed(input.LEFT)  then move_biscuit(-1, 0)
@@ -132,11 +134,12 @@ function plugin.loop()
     end
 end
 
--- Biscuit renderer: 2-column tile grid. Title only, no subtitle. Tiles are
--- top-anchored at a fixed compact height — no stretching to fill the body.
--- Selected tile is filled (inverted text); unselected tiles have a 2px
--- hollow border. Empty trailing cells are skipped.
-local TILE_HEIGHT = 70
+-- Biscuit renderer: 2-column tile grid. Title only. Tiles are top-anchored
+-- at a fixed compact height per style — no stretching. Selected tile is
+-- filled (inverted text); unselected tiles have a 2px hollow border.
+-- Empty trailing cells are skipped.
+local TILE_HEIGHT_SMALL = 70
+local TILE_HEIGHT_LARGE = 140
 
 local function render_biscuit_grid(font_id, bx, by, bw, bh)
     local cols = TILE_COLS
@@ -144,7 +147,7 @@ local function render_biscuit_grid(font_id, bx, by, bw, bh)
 
     local gap = 8
     local cell_w = math.floor((bw - gap * (cols + 1)) / cols)
-    local cell_h = TILE_HEIGHT
+    local cell_h = (home_style == "biscuit_large") and TILE_HEIGHT_LARGE or TILE_HEIGHT_SMALL
     local lh = display.getLineHeight(font_id)
 
     for i, item in ipairs(menu_items) do
@@ -176,7 +179,7 @@ function render()
         ui.draw_header(fonts.ui, "CrossLua Reader")
 
         local bx, by, bw, bh = layout.bodyArea()
-        if home_style == "biscuit" then
+        if is_biscuit() then
             render_biscuit_grid(fonts.ui, bx, by, bw, bh)
         else
             ui.draw_menu(fonts.ui, menu_items, selected, by)
